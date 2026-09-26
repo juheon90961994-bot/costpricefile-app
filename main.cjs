@@ -13,7 +13,7 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: "#f7faff",
     autoHideMenuBar: true,
-    title: "Product cost Management App",
+    title: "Product cost Management App 4.1.0",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

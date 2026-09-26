@@ -12,7 +12,7 @@ const DEFAULT_SUPABASE_PUBLISHABLE_KEY = window.COST_APP_CONFIG?.supabasePublish
 const COST_UPLOAD_COLUMNS = [
   { target: '품목명', sources: ['품목명'] },
   { target: '회사', sources: ['회사'] },
-  { target: '거래처명', sources: ['거래처명', '거래처'] },
+  { target: '거래처명', sources: ['거래처명', '거래처', '주거래처'] },
   { target: '담당자', sources: ['담당자명', '담당자'] },
   { target: '단위', sources: ['단위'] },
   { target: '달러단가', sources: ['달러단가'], numeric: true },
@@ -206,7 +206,7 @@ function cleanCellValue(value) {
 }
 
 function normalizeItem(value) {
-  return String(value ?? '').trim();
+  return normalizeItemKey(value);
 }
 
 function classifyRows(excel, databaseRows) {
@@ -227,9 +227,12 @@ function classifyRows(excel, databaseRows) {
     const payload = {};
     uploadColumns.forEach(({ target, sources, numeric }) => {
       const source = sources.find(header => Object.prototype.hasOwnProperty.call(entry.row, header) && hasUploadValue(entry.row[header]));
-      if (source !== undefined) payload[target] = normalizeUploadValue(entry.row[source], numeric);
+      if (source !== undefined) {
+        const value = normalizeUploadValue(entry.row[source], numeric);
+        if (hasUploadValue(value)) payload[target] = value;
+      }
     });
-    normalizeCurrencyPrices(payload, entry.row);
+    // Blank cells never clear existing database values, including currency prices.
     if (!entry.item) return makeItem('review', entry, payload, '필수값 “품목”이 없습니다.');
     if (seenExcelItems.has(entry.item)) {
       return makeItem('unchanged', entry, payload, 'Excel 중복 품목입니다. 첫 번째 행만 처리하고 건너뜁니다.');
@@ -278,13 +281,6 @@ function normalizeUploadValue(value, numeric) {
   if (normalized === '') return value;
   const number = Number(normalized);
   return Number.isFinite(number) ? number : value;
-}
-
-function normalizeCurrencyPrices(payload, sourceRow) {
-  const unit = String(payload[UNIT_COLUMN] ?? sourceRow[UNIT_COLUMN] ?? '').normalize('NFKC').trim().toUpperCase();
-  if (unit === 'KRW' || unit === 'WON' || unit === '원화' || unit === '원') {
-    payload[DOLLAR_PRICE_COLUMN] = null;
-  }
 }
 
 function makeItem(type, entry, payload, detail, locator = {}) {
