@@ -109,6 +109,27 @@ const ExcelArchive = (() => {
     if(cleanupError) throw new Error('새 파일 보관 및 BOM 동기화는 완료되었지만 기존 파일 정리에 실패했습니다. '+cleanupError.message);
     return path;
   }
+  async function findItem(item) {
+    const settings=getConnectionSettings(),url=new URL(settings.url+'/rest/v1/order_mobility');
+    url.searchParams.set('select','품목');url.searchParams.set('품목','eq.'+item);url.searchParams.set('limit','1');
+    const rows=await supabaseRequest(settings,url.toString());
+    if(!Array.isArray(rows))throw new Error('품목 조회 응답을 확인할 수 없습니다.');
+    return rows.length>0;
+  }
+  async function registerItem(item,values) {
+    const payload={'품목':item,BOM:'있음'};
+    for(const field of ['품목명','프로젝트명','세부프로젝트명']){
+      payload[field]=String(values[field]??'').trim();
+      if(!payload[field])throw new Error(field+'을 입력해 주세요.');
+    }
+    if(await findItem(item))throw new Error('이미 등록된 품목입니다. 조회 메뉴에서 확인해 주세요.');
+    const settings=getConnectionSettings();
+    const rows=await supabaseRequest(settings,settings.url+'/rest/v1/order_mobility',{
+      method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(payload)
+    });
+    if(!Array.isArray(rows)||rows.length!==1||rows[0]['품목']!==item)throw new Error('등록 결과를 확인할 수 없습니다. 조회 후 다시 시도해 주세요.');
+    return rows[0];
+  }
   async function readForItem(item) {
     const value=String(item??'').normalize('NFC');
     if(!value.trim()) throw new Error('선택한 자료에 품목 값이 없습니다.');
@@ -125,7 +146,7 @@ const ExcelArchive = (() => {
     const bytes = new Uint8Array(await (await request('object/'+bucket+'/'+path+'?t='+Date.now())).arrayBuffer());
     return window.desktopFile.saveExcel(bytes, name);
   }
-  return {identity,key,filename,list,upload,download,remove,syncBom,deleteFile,readForItem};
+  return {identity,key,filename,list,upload,download,remove,syncBom,deleteFile,readForItem,findItem,registerItem};
 })();
 
 (() => {
@@ -134,6 +155,12 @@ const ExcelArchive = (() => {
   const body = document.getElementById('archiveBody');
   const search = document.getElementById('archiveSearch');
   let rows = [], busy = false;
+  ExcelArchive.isBusy=()=>busy;
+  ExcelArchive.resetView=()=>{
+    rows=[];input.value='';search.value='';body.replaceChildren();
+    message.textContent='목록 새로고침을 누르면 보관된 파일이 표시됩니다.';
+    document.getElementById('archiveEmpty').hidden=true;
+  };
   const controls = [...document.querySelectorAll('#excelArchive input, #excelArchive button')];
   function render() {
     body.replaceChildren();
@@ -186,7 +213,47 @@ const ExcelArchive = (() => {
     input.value='';
     message.textContent=`${file.name} 보관 완료. _ 앞의 문자열이 같은 기존 파일은 대체되었습니다.`;
     try { rows=await ExcelArchive.list(); } catch(error) { message.textContent+=' 목록 새로고침 실패: '+error.message; }
+    try{
+      const registration=await offerRegistration(file);
+      if(registration==='registered')message.textContent+=' 신규 품목 등록 완료 (BOM: 있음).';
+      if(registration==='cancelled')message.textContent+=' 품목 등록은 취소했습니다. 파일을 다시 올리면 등록할 수 있습니다.';
+    }catch(error){message.textContent+=' 신규 품목 확인 실패: '+error.message;}
+
   }));
+  async function offerRegistration(file){
+    const item=ExcelArchive.identity(file.name);
+    if(await ExcelArchive.findItem(item))return 'existing';
+    const dialog=document.createElement('dialog');
+    dialog.style.cssText='border:1px solid #ccd6ee;border-radius:16px;padding:28px;width:440px;max-width:90vw';
+    const title=document.createElement('h2');title.textContent='신규 BOM 품목 등록';
+    const help=document.createElement('p');help.textContent='파일은 보관되었습니다. 신규 품목의 정보를 입력해 주세요.';
+    const form=document.createElement('form');form.style.cssText='display:grid;gap:14px';
+    const fields={};
+    for(const field of ['품목','품목명','프로젝트명','세부프로젝트명']){
+      const label=document.createElement('label');label.textContent=field;
+      const input=document.createElement('input');input.name=field;input.required=true;input.style.cssText='display:block;width:100%;padding:10px;box-sizing:border-box';
+      if(field==='품목'){input.value=item;input.readOnly=true;}
+      fields[field]=input;label.append(input);form.append(label);
+    }
+    const error=document.createElement('p');error.setAttribute('role','alert');
+    const save=document.createElement('button');save.type='submit';save.textContent='품목 등록';
+    const cancel=document.createElement('button');cancel.type='button';cancel.textContent='나중에 등록';
+    form.append(error,save,cancel);dialog.append(title,help,form);document.body.append(dialog);
+    return new Promise(resolve=>{
+      let saving=false;
+      function close(result){dialog.close();dialog.remove();resolve(result);}
+      cancel.addEventListener('click',()=>{if(!saving)close('cancelled');});
+      dialog.addEventListener('cancel',event=>{event.preventDefault();if(!saving)close('cancelled');});
+      form.addEventListener('submit',async event=>{
+        event.preventDefault();if(saving)return;
+        saving=true;save.disabled=true;cancel.disabled=true;error.textContent='등록 중입니다…';
+        try{await ExcelArchive.registerItem(item,Object.fromEntries(Object.entries(fields).map(([key,input])=>[key,input.value])));close('registered');}
+        catch(failure){error.textContent='등록 실패: '+failure.message+' (등록 권한 또는 중복 품목을 확인해 주세요.)';}
+        finally{saving=false;save.disabled=false;cancel.disabled=false;}
+      });
+      dialog.showModal();fields['품목명'].focus();
+    });
+  }
   search.addEventListener('input',render);
   // Do not load remotely until explicitly requested, keeping cost upload independent.
 })();

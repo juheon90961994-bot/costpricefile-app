@@ -37,6 +37,7 @@ const uploadResult = document.querySelector('#uploadResult');
 let uploadFile;
 let analysis;
 let automaticUploadRunning = false;
+let uploadOperations=0;
 
 
 
@@ -109,7 +110,11 @@ async function selectUploadFile(file) {
   }
 }
 
-async function analyzeUpload() {
+async function analyzeUpload(){
+  uploadOperations++;
+  try{return await analyzeUploadInternal();}finally{uploadOperations--;}
+}
+async function analyzeUploadInternal() {
   if (!uploadFile) return;
   setBusy(analyzeButton, true, '분석 중…');
   preview.hidden = true;
@@ -263,7 +268,11 @@ function renderAnalysis(result) {
   preview.hidden = false;
 }
 
-async function executeUpload() {
+async function executeUpload(){
+  uploadOperations++;
+  try{return await executeUploadInternal();}finally{uploadOperations--;}
+}
+async function executeUploadInternal() {
   if (!analysis || (!analysis.updates.length && !analysis.inserts.length)) return;
   const settings = getConnectionSettings();
   const actions = [...analysis.updates, ...analysis.inserts];
@@ -598,4 +607,17 @@ async function fetchUnitPriceRows(settings) {
 
 function normalizeItemKey(value) {
   return String(value ?? '').normalize('NFKC').replace(/\u00a0/g, ' ').trim().toUpperCase();
+}
+
+function resetUploadView(){
+  uploadFile=undefined;analysis=undefined;uploadInput.value='';uploadInput.disabled=false;
+  uploadFileName.textContent='업로드할 Excel 파일을 선택해 주세요';
+  uploadDropzone.classList.remove('dragging');
+  analyzeButton.disabled=true;analyzeButton.textContent='업로드 분석';
+  executeButton.disabled=true;
+  preview.hidden=true;previewBody.replaceChildren();
+  for(const id of ['newCount','updateCount','unchangedCount','reviewCount'])document.getElementById(id).textContent='0';
+  progressPanel.hidden=true;progressBar.value=0;progressText.textContent='0 / 0';progressPercent.textContent='0%';
+  uploadResult.hidden=true;uploadResult.textContent='';uploadResult.className='upload-result';
+  showMessage('');
 }

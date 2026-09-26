@@ -28,8 +28,8 @@ app.on('browser-window-created', (_event, window) => {
         check(!document.querySelector('#supabaseSettings'), 'No connection settings UI');
         check(getConnectionSettings().url === 'https://lehhamzewsrayguaxpwf.supabase.co', 'Built-in connection');
         check(getConnectionSettings().accessToken === '', 'No login needed');
-        check(document.title === 'Product cost Management App 4.1.5', 'Window title');
-        check(document.querySelector('.app-version').textContent === 'Version 4.1.5', 'Version label');
+        check(document.title === 'Product cost Management App 4.1.10', 'Window title');
+        check(document.querySelector('.app-version').textContent === 'Version 4.1.10', 'Version label');
         check(typeof window.desktopFile?.saveExcel === 'function', 'File preload bridge');
         check(typeof window.desktopExchange?.getFirstUsdExchangeRate === 'function', 'Exchange preload bridge');
         document.querySelector('#tabLookup').click();

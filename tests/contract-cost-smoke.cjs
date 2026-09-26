@@ -41,9 +41,31 @@ app.on('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',
    check(sheet.getColumn(2).width===14.5 && sheet.getColumn(3).width===35.4 && sheet.getColumn(4).hidden,'Columns');
    check(sheet.getCell('A1').font.size===15 && sheet.name==='별내선','Title and sheet name');
    check(sheet.getCell('N4').value.result===200,'Cost formula result');
+   const contractBook=XLSX.utils.book_new();
+   XLSX.utils.book_append_sheet(contractBook,XLSX.utils.aoa_to_sheet([
+    ['단계','품목','품목명','규격','누적실소요량','주거래처','BOM구분','계정구분','현재고','단위','달러단가'],
+    [1,'PART','일반','',2,'','사급','',0,'KRW',null],
+    [1,'PART','도급 원화','',2,'','도급','',0,'KRW',null],
+    [1,'USD','도급 달러','',3,'',' 도급 ','',0,'USD',10],
+    [1,'MISSING','단가와 수량 없음','',null,'','도급','',0,'KRW',null],
+    [1,'USD','일반 달러','',3,'','사급','',0,'USD',10]
+   ]),'BOM');
+   const contractBytes=XLSX.write(contractBook,{type:'array',bookType:'xlsx'});
+   const file=new File([contractBytes],'TEST_도급검증.xlsx');
+   const single=await buildProductCost(file);
+   const multi=await buildCostFiles([file,new File([contractBytes],'OTHER_도급검증.xlsx')]);
+   for(const output of [single,multi]){
+    const checked=new ExcelJS.Workbook();await checked.xlsx.load(output.data);
+    for(const ws of checked.worksheets){
+     check(ws.getCell('N4').value.result===200,'Normal KRW preserved');
+     for(const row of [5,6,7])check(ws.getCell('N'+row).value===0,'Contract value zero');
+     check(ws.getCell('N8').value.result===39000,'Normal USD preserved');
+     check(ws.getCell('N9').value.result===39200,'Grand total excludes contracts');
+    }
+   }
    available=false;let failed=false;try{await ExcelArchive.readForItem('MODEL')}catch{failed=true}check(failed,'Missing file blocked');
    available=true;duplicate=true;failed=false;try{await ExcelArchive.readForItem('MODEL')}catch{failed=true}check(failed,'Duplicate blocked');
-   return 'PASS: lookup button → archive → shared generation → save; matching outputs, formats, formulas, missing/duplicate files';
+   return 'PASS: contract rows zero in single and multi workbooks; KRW, USD and totals verified';
   })()`));
   if(!saved || saved.defaultName!=='MODEL_별내선_제품원가.xlsx')throw Error('Save filename mismatch');
   app.exit(0);

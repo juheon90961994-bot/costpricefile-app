@@ -41,11 +41,33 @@ app.on('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',
    check(sheet.getColumn(2).width===14.5 && sheet.getColumn(3).width===35.4 && sheet.getColumn(4).hidden,'Columns');
    check(sheet.getCell('A1').font.size===15 && sheet.name==='별내선','Title and sheet name');
    check(sheet.getCell('N4').value.result===200,'Cost formula result');
+   const readOriginal=ExcelArchive.readForItem;
+   ExcelArchive.readForItem=async(item)=>new File([bytes],item+'_별내선.xlsx');
+   const multiRows=[{'품목':'MODEL','프로젝트명':'별내선','품목명':'발매기'},{'품목':'MODEL2','프로젝트명':'별내선','품목명':'개집표기'}];
+   const multi=await buildMultiCost(multiRows);
+   const merged=new ExcelJS.Workbook();await merged.xlsx.load(multi.data);
+   check(merged.worksheets.length===2,'Selected count matches sheet count');
+   check(merged.worksheets[0].name==='별내선' && merged.worksheets[1].name==='별내선 (2)','Unique sheet names');
+   for(const ws of merged.worksheets){
+    check(ws.getCell('N4').value.result===200 && ws.getCell('N4').value.formula==='E4*M4','Formula preserved');
+    check(ws.getColumn(3).width===35.4 && ws.getColumn(4).hidden && ws.getCell('A1').font.size===15,'Formatting preserved');
+    check(ws.autoFilter && ws.views[0].state==='frozen','Filter and frozen panes preserved');
+   }
+   check(multi.name==='별내선_멀티원가분석.xlsx','Common word filename');
+   orderRows=[multiRows[0]];renderOrderCandidates();check(document.querySelector('#orderMultiToggle').hidden,'Single result hides multi');
+   orderRows=multiRows;renderOrderCandidates();check(!document.querySelector('#orderMultiToggle').hidden,'Multiple results show multi');
+   document.querySelector('#orderMultiToggle').click();
+   for(let i=0;i<2;i++){const box=document.querySelectorAll('#orderCandidateBody input')[i];box.checked=true;box.dispatchEvent(new Event('change'));}
+   check(orderMultiSelected.size===2,'Checkboxes select two');
+   document.querySelector('#orderMultiGenerate').click();
+   for(let i=0;i<200 && orderMutating;i++)await new Promise(r=>setTimeout(r,20));
+   check(orderMessage.textContent.includes('2개 시트 저장 완료'),orderMessage.textContent);
+   ExcelArchive.readForItem=readOriginal;
    available=false;let failed=false;try{await ExcelArchive.readForItem('MODEL')}catch{failed=true}check(failed,'Missing file blocked');
    available=true;duplicate=true;failed=false;try{await ExcelArchive.readForItem('MODEL')}catch{failed=true}check(failed,'Duplicate blocked');
-   return 'PASS: lookup button → archive → shared generation → save; matching outputs, formats, formulas, missing/duplicate files';
+   return 'PASS: multi selection UI, multi-sheet saved file, unique names, common filename, formats and formulas';
   })()`));
-  if(!saved || saved.defaultName!=='MODEL_별내선_제품원가.xlsx')throw Error('Save filename mismatch');
+  if(!saved || saved.defaultName!=='별내선_멀티원가분석.xlsx')throw Error('Save filename mismatch');
   app.exit(0);
  }catch(error){console.error(error);app.exit(1)}
 }));

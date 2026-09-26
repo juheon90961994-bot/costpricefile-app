@@ -9,6 +9,8 @@ const LOOKUP_FIELDS = ['품목', '품목명', '거래처명', '담당자', '단�
 const LOOKUP_LIMIT = 100;
 
 let lookupRows = [];
+let lookupSequence=0;
+let lookupMutating=false;
 let editingLookupKey = null;
 
 tabLookup.addEventListener('click', () => {
@@ -29,6 +31,7 @@ lookupForm.addEventListener('submit', event => {
 });
 
 async function searchCosts() {
+  const sequence=++lookupSequence;
   const keyword = normalizeItemKey(lookupInput.value);
   if (!keyword) {
     showLookupMessage('조회할 품목을 입력해 주세요.', 'error');
@@ -39,6 +42,7 @@ async function searchCosts() {
   showLookupMessage('Supabase cost 테이블을 조회하고 있습니다.');
   try {
     const rows = await fetchAllCostRows(getConnectionSettings());
+    if(sequence!==lookupSequence)return;
     lookupRows = rows
       .filter(row => normalizeItemKey(row[ITEM_COLUMN]).includes(keyword))
       .slice(0, LOOKUP_LIMIT);
@@ -47,11 +51,12 @@ async function searchCosts() {
     const limited = lookupRows.length === LOOKUP_LIMIT ? ' 최대 100건까지 표시합니다.' : '';
     showLookupMessage(`${lookupRows.length.toLocaleString()}건을 조회했습니다.${limited}`, 'success');
   } catch (error) {
+    if(sequence!==lookupSequence)return;
     lookupRows = [];
     lookupResults.hidden = true;
     showLookupMessage(toFriendlyError(error), 'error');
   } finally {
-    setLookupBusy(false);
+    if(sequence===lookupSequence)setLookupBusy(false);
   }
 }
 
@@ -135,6 +140,7 @@ async function saveLookupRow(original, tr) {
     '원화단가': wonPrice,
   };
 
+  lookupMutating=true;
   setLookupBusy(true);
   showLookupMessage(`${original[ITEM_COLUMN]} 품목을 수정하고 있습니다.`);
   try {
@@ -147,6 +153,7 @@ async function saveLookupRow(original, tr) {
   } catch (error) {
     showLookupMessage(toFriendlyError(error), 'error');
   } finally {
+    lookupMutating=false;
     setLookupBusy(false);
   }
 }
@@ -158,6 +165,7 @@ async function deleteLookupRow(row) {
     return;
   }
   if (!window.confirm(`품목 ${item}을(를) 삭제하시겠습니까?\n삭제한 데이터는 자동으로 복구되지 않습니다.`)) return;
+  lookupMutating=true;
   setLookupBusy(true);
   showLookupMessage(`${item} 품목을 삭제하고 있습니다.`);
   try {
@@ -170,6 +178,7 @@ async function deleteLookupRow(row) {
   } catch (error) {
     showLookupMessage(toFriendlyError(error), 'error');
   } finally {
+    lookupMutating=false;
     setLookupBusy(false);
   }
 }

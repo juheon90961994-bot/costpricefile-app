@@ -14,6 +14,8 @@ const orderEdit = document.querySelector('#orderEdit');
 const orderSave = document.querySelector('#orderSave');
 const orderCancel = document.querySelector('#orderCancel');
 const orderDelete = document.querySelector('#orderDelete');
+let orderMultiMode=false;
+const orderMultiSelected=new Set();
 let orderRows = [];
 let selectedOrder = null;
 let orderEditing = false;
@@ -37,6 +39,7 @@ function scheduleOrderSearch() {
   // Clear stale selection immediately when the query changes.
   selectedOrder = null;
   orderRows = [];
+  orderMultiMode=false; orderMultiSelected.clear();
   orderCandidates.hidden = true;
   orderDetail.hidden = true;
   orderSearchTimer = setTimeout(searchOrders, 300);
@@ -88,6 +91,7 @@ async function searchOrders() {
   selectedOrder = null;
   orderEditing = false;
   orderRows = [];
+  orderMultiMode=false; orderMultiSelected.clear();
   orderCandidates.hidden = true;
   orderDetail.hidden = true;
   if (!keyword) { showOrderMessage('품목, 프로젝트명 또는 세부프로젝트명의 일부를 입력해 주세요.'); return; }
@@ -112,6 +116,11 @@ function orderDisplay(value) {
 }
 
 function renderOrderCandidates() {
+  document.querySelector('#orderMultiToggle').hidden=orderRows.length<2;
+  document.querySelector('#orderMultiToggle').textContent=orderMultiMode?'멀티 선택 취소':'멀티 원가 분석';
+  document.querySelector('#orderMultiGenerate').hidden=!orderMultiMode;
+  document.querySelector('#orderMultiGenerate').disabled=orderMutating || !orderMultiSelected.size;
+  document.querySelector('#orderMultiGenerate').textContent='선택 원가 생성 ('+orderMultiSelected.size+')';
   orderCandidateBody.replaceChildren(...orderRows.map((row, index) => {
     const tr = document.createElement('tr');
     tr.classList.toggle('order-selected', row === selectedOrder);
@@ -121,6 +130,16 @@ function renderOrderCandidates() {
       tr.append(td);
     });
     const td = document.createElement('td');
+    if(orderMultiMode){
+      const checkbox=document.createElement('input');checkbox.type='checkbox';
+      checkbox.checked=orderMultiSelected.has(row);checkbox.disabled=orderMutating;
+      checkbox.setAttribute('aria-label',String(row['품목'])+' 멀티 선택');
+      checkbox.addEventListener('change',()=>{
+        if(checkbox.checked)orderMultiSelected.add(row);else orderMultiSelected.delete(row);
+        renderOrderCandidates();
+      });
+      td.append(checkbox);tr.append(td);return tr;
+    }
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'order-select';
@@ -296,3 +315,50 @@ document.querySelector('#orderGenerateCost').addEventListener('click',async()=>{
     controls.forEach(control=>control.disabled=false);
   }
 });
+
+document.querySelector('#orderMultiToggle').addEventListener('click',()=>{
+  if(orderMutating)return;
+  orderMultiMode=!orderMultiMode;orderMultiSelected.clear();
+  selectedOrder=null;orderEditing=false;renderOrderDetail();renderOrderCandidates();
+});
+
+async function buildMultiCost(rows,onProgress=()=>{}){
+  const files=[];
+  for(const row of rows)files.push(await ExcelArchive.readForItem(row['품목']));
+  return buildCostFiles(files,rows,onProgress);
+}
+
+document.querySelector('#orderMultiGenerate').addEventListener('click',async()=>{
+  if(orderMutating || !orderMultiSelected.size)return;
+  const rows=orderRows.filter(row=>orderMultiSelected.has(row));
+  clearTimeout(orderSearchTimer);orderSearchController?.abort();orderSearchSequence++;
+  orderMutating=true;
+  const controls=[...document.querySelectorAll('#orderLookupSection button, #orderLookupSection input, #orderLookupSection select')];
+  controls.forEach(control=>control.disabled=true);
+  try{
+    orderMessage.textContent='선택한 품목의 보관 파일을 확인하고 있습니다…';
+    const result=await buildMultiCost(rows,(current,total)=>{orderMessage.textContent='멀티 원가 생성 중 '+current+' / '+total;});
+    const saved=await window.desktopFile.saveExcel(new Uint8Array(result.data),result.name);
+    orderMessage.textContent=saved.canceled?'멀티 원가 저장을 취소했습니다.':rows.length+'개 시트 저장 완료: '+result.name;
+  }catch(error){orderMessage.textContent='멀티 원가 생성 실패: '+error.message;}
+  finally{orderMutating=false;controls.forEach(control=>control.disabled=false);renderOrderCandidates();}
+});
+
+// Capture navigation before existing tab handlers change the active tab.
+for(const tab of [tabGenerate,tabUpload,tabDownload,tabLookup]){
+  tab.addEventListener('click',event=>{
+    if(tab.classList.contains('active'))return;
+    if(orderMutating || lookupMutating || automaticUploadRunning || uploadOperations>0 || ExcelArchive.isBusy()){
+      event.preventDefault();event.stopImmediatePropagation();
+      window.alert('진행 중인 작업이 완료된 후 메뉴를 이동해 주세요.');return;
+    }
+    resetUploadView();ExcelArchive.resetView();
+    lookupSequence++;
+    lookupRows=[];editingLookupKey=null;lookupInput.value='';
+    lookupBody.replaceChildren();lookupResults.hidden=true;showLookupMessage('');setLookupBusy(false);
+    clearTimeout(orderSearchTimer);orderSearchController?.abort();orderSearchSequence++;
+    orderRows=[];selectedOrder=null;orderEditing=false;orderMultiMode=false;orderMultiSelected.clear();
+    orderKeyword.value='';orderField.value='';showOrderMessage('');
+    orderDetailFields.replaceChildren();renderOrderCandidates();renderOrderDetail();
+  },true);
+}

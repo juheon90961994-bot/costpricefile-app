@@ -9,16 +9,30 @@ const tabUpload=document.querySelector('#tabUpload');
 const tabDownload=document.querySelector('#tabDownload');
 const tabLookup=document.querySelector('#tabLookup');
 let selected;
+let selectedFiles=[];
+let generatingCost=false;
 let latestDownload;
 
 const OUTPUT_HEADERS=['단계','품목','품목명','규격','소요량','담당자','주거래처','BOM구분','계정구분','현재고','단위','달러단가','원화단가','합계'];
 const SOURCE_FIELDS=['단계','품목','품목명','규격','누적실소요량',null,'주거래처','BOM구분','계정구분','현재고',null,null,null,null];
-const COLUMN_WIDTHS=[5.875,11.625,35.4,44.125,8.125,10.125,18.625,10.875,9.375,9.5,11.625,12.125,12.625,14];
+const COLUMN_WIDTHS=[5.875,14.5,35.4,44.125,8.125,10.125,18.625,10.875,9.375,9.5,11.625,12.125,12.625,14];
 const ACCOUNTING='_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-';
 const BORDER={top:{style:'thin',color:{argb:'FF000000'}},left:{style:'thin',color:{argb:'FF000000'}},bottom:{style:'thin',color:{argb:'FF000000'}},right:{style:'thin',color:{argb:'FF000000'}}};
 
 function setStatus(type,text){statusEl.className=`status ${type}`;statusEl.querySelector('span').textContent=type==='working'?'↻':type==='done'?'✓':type==='error'?'!':'i';statusEl.querySelector('p').textContent=text}
-function choose(file){if(!file)return;if(!/\.(xls|xlsx|xlsm)$/i.test(file.name)){setStatus('error','.xls, .xlsx 또는 .xlsm 파일만 선택할 수 있어요.');return}selected=file;latestDownload=undefined;nameEl.textContent=file.name;meta.textContent=`${(file.size/1024).toFixed(file.size>102400?0:1)} KB`;button.disabled=false;setStatus('ready','원가를 생성할 준비가 되었습니다.')}
+function choose(file){chooseFiles(file?[file]:[]);}
+function chooseFiles(values){
+  if(generatingCost)return;
+  const files=Array.from(values||[]);
+  if(!files.length)return;
+  const invalid=files.find(file=>!/\.(xls|xlsx|xlsm)$/i.test(file.name));
+  if(invalid){setStatus('error',invalid.name+': .xls, .xlsx 또는 .xlsm 파일만 선택할 수 있어요.');return;}
+  selectedFiles=files;selected=files[0];latestDownload=undefined;
+  nameEl.textContent=files.map(file=>file.name).join(' · ');
+  meta.textContent=files.length+'개 파일 · '+(files.reduce((sum,file)=>sum+file.size,0)/1024).toFixed(1)+' KB';
+  button.disabled=false;
+  setStatus('ready',files.length===1?'원가를 생성할 준비가 되었습니다.':files.length+'개 BOM을 한 엑셀 파일의 개별 시트로 생성합니다.');
+}
 
 function downloadResult(){
   if(!latestDownload)return;
@@ -46,10 +60,10 @@ tabDownload.addEventListener('click',async()=>{
 });
 
 drop.addEventListener('click',()=>input.click());
-input.addEventListener('change',()=>choose(input.files[0]));
+input.addEventListener('change',()=>chooseFiles(input.files));
 drop.addEventListener('dragover',event=>{event.preventDefault();drop.classList.add('dragging')});
 drop.addEventListener('dragleave',()=>drop.classList.remove('dragging'));
-drop.addEventListener('drop',event=>{event.preventDefault();drop.classList.remove('dragging');choose(event.dataTransfer.files[0])});
+drop.addEventListener('drop',event=>{event.preventDefault();drop.classList.remove('dragging');chooseFiles(event.dataTransfer.files)});
 
 async function buildProductCost(file){
     const sourceBook=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,raw:true});
@@ -104,6 +118,11 @@ async function buildProductCost(file){
     }
     const dataLastRow=sheet.rowCount;
     for(let row=4;row<=dataLastRow;row++){
+      const bomType=String(sheet.getCell(row,8).value??'').normalize('NFKC').trim();
+      if(bomType==='도급'){
+        sheet.getCell(row,14).value=0;
+        continue;
+      }
       const quantity=toNumber(sheet.getCell(row,5).value);
       const unit=String(sheet.getCell(row,11).value??'').normalize('NFKC').trim().toUpperCase();
       const priceColumn=unit==='USD'?12:13;
@@ -133,19 +152,20 @@ async function buildProductCost(file){
 
     const data=await workbook.xlsx.writeBuffer();
 
-    return {data,name:outputName,matchedPriceCount,missingPriceCount};
+    return {data,workbook,name:outputName,matchedPriceCount,missingPriceCount};
 }
 
 button.addEventListener('click',async()=>{
-  if(!selected)return;
-  const file=selected;
+  if(!selectedFiles.length || generatingCost)return;
+  const files=[...selectedFiles];
+  generatingCost=true;input.disabled=true;drop.disabled=true;
   button.disabled=true;button.firstChild.textContent='제품 원가 생성 중… ';setStatus('working','제품 BOM과 원가 자료를 확인하고 있어요…');
   try{
-    const result=await buildProductCost(file);
+    const result=files.length===1?await buildProductCost(files[0]):await buildCostFiles(files,undefined,(current,total)=>setStatus('working','제품 원가 생성 중 '+current+' / '+total));
     latestDownload={blob:new Blob([result.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),name:result.name};
     downloadResult();
     setStatus('done',`제품 원가 생성을 완료했습니다. 단가 적용 ${result.matchedPriceCount}건 · 단가없음 ${result.missingPriceCount}건`);
-  }catch(error){const message=typeof toFriendlyError==='function'?toFriendlyError(error):error.message;setStatus('error',`원가 생성 실패: ${message}`)}finally{button.disabled=false;button.firstChild.textContent='제품 원가 생성 '}
+  }catch(error){const message=typeof toFriendlyError==='function'?toFriendlyError(error):error.message;setStatus('error',`원가 생성 실패: ${message}`)}finally{generatingCost=false;input.disabled=false;drop.disabled=false;button.disabled=false;button.firstChild.textContent='제품 원가 생성 '}
 });
 
 function getOutputSheetName(filename){
@@ -221,4 +241,36 @@ function applyReferenceFormat(sheet,lastRow,dataLastRow){
   sheet.getCell(lastRow,14).font={name:'맑은 고딕',size:11,bold:true,color:{argb:'FF000000'}};
   sheet.getCell(lastRow,14).numFmt=ACCOUNTING;
   sheet.pageSetup={orientation:'landscape',fitToHeight:0};
+}
+
+function multiCostFilename(rows,files){
+  rows=rows||files.map(()=>({}));
+  const groups=rows.map((row,index)=>{
+    const label=[row['프로젝트명'],row['세부프로젝트명'],row['품목명'],files[index].name.replace(/\.(xlsx|xls|xlsm)$/i,'')].filter(Boolean).join(' ');
+    return [...new Set(label.normalize('NFC').split(/[\s_\-.,()[\]]+/).filter(Boolean))];
+  });
+  const common=groups[0].filter(word=>groups.every(group=>group.includes(word)));
+  const stem=(common.join('_')||'선택품목').replace(/[<>:"/\\|?*\x00-\x1f]/g,'').slice(0,100);
+  return stem+'_멀티원가분석.xlsx';
+}
+
+async function buildCostFiles(files,rows,onProgress=()=>{}){
+  if(!files.length)throw new Error('BOM 파일을 선택해 주세요.');
+  const combined=new ExcelJS.Workbook();combined.calcProperties.fullCalcOnLoad=true;
+  const used=new Set();
+  let matchedPriceCount=0,missingPriceCount=0;
+  for(let index=0;index<files.length;index++){
+    onProgress(index+1,files.length);
+    let result;
+    try{result=await buildProductCost(files[index]);}catch(error){throw new Error(files[index].name+': '+error.message);}
+    matchedPriceCount+=result.matchedPriceCount;missingPriceCount+=result.missingPriceCount;
+    const original=result.workbook.worksheets[0];
+    const base=original.name;let name=base,number=2;
+    while(used.has(name.toLowerCase())){const suffix=' ('+number+++')';name=base.slice(0,31-suffix.length)+suffix;}
+    used.add(name.toLowerCase());
+    const target=combined.addWorksheet(name);
+    const model=structuredClone(original.model);model.id=target.id;model.name=name;
+    target.model=model;
+  }
+  return {data:await combined.xlsx.writeBuffer(),name:multiCostFilename(rows,files),matchedPriceCount,missingPriceCount};
 }

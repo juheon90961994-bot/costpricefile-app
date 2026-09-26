@@ -17,8 +17,8 @@ module.exports = {
     config: {
       name: "product_cost_management_app",
       authors: "ATEC Mobility",
-      description: "Product cost Management App 4.1.5",
-      setupExe: "Product-cost-Management-App-4.1.5-Setup.exe",
+      description: "Product cost Management App 4.1.10",
+      setupExe: "Product-cost-Management-App-4.1.10-Setup.exe",
       noMsi: true
     }
   }]
