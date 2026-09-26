@@ -1,7 +1,7 @@
 {
   "name": "standard-cost-format",
-  "productName": "Product cost Management App 4.1.0",
-  "version": "4.1.0",
+  "productName": "Product cost Management App 4.1.5",
+  "version": "4.1.5",
   "description": "제품 원가 생성 및 관리 Windows 데스크톱 앱",
   "main": "main.cjs",
   "private": true,

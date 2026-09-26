@@ -25,8 +25,11 @@ app.on('browser-window-created', (_event, window) => {
       const base64 = source ? fs.readFileSync(source).toString('base64') : null;
       const result = await window.webContents.executeJavaScript(`(async () => {
         const check = (value, message) => { if (!value) throw new Error(message); };
-        check(document.title === 'Product cost Management App 4.1.0', 'Window title');
-        check(document.querySelector('.app-version').textContent === 'Version 4.1.0', 'Version label');
+        check(!document.querySelector('#supabaseSettings'), 'No connection settings UI');
+        check(getConnectionSettings().url === 'https://lehhamzewsrayguaxpwf.supabase.co', 'Built-in connection');
+        check(getConnectionSettings().accessToken === '', 'No login needed');
+        check(document.title === 'Product cost Management App 4.1.5', 'Window title');
+        check(document.querySelector('.app-version').textContent === 'Version 4.1.5', 'Version label');
         check(typeof window.desktopFile?.saveExcel === 'function', 'File preload bridge');
         check(typeof window.desktopExchange?.getFirstUsdExchangeRate === 'function', 'Exchange preload bridge');
         document.querySelector('#tabLookup').click();
@@ -70,8 +73,6 @@ app.on('browser-window-created', (_event, window) => {
           check(!options.method || options.method === 'GET', 'Unexpected mutation');
           return new Response(JSON.stringify(rows), {status:200});
         };
-        document.querySelector('#supabaseUrl').value = 'https://test.supabase.co';
-        document.querySelector('#supabaseAnonKey').value = 'test-key';
         await selectUploadFile(file);
         check(patches === excel.rows.length, 'All input rows updated');
         check(!document.querySelector('#uploadResult').classList.contains('error'), document.querySelector('#uploadResult').textContent);
@@ -85,7 +86,8 @@ app.on('browser-window-created', (_event, window) => {
       })()`);
       assert.deepEqual(errors, [], 'Renderer errors');
       fs.writeFileSync(path.join(testDir, 'result.json'), JSON.stringify({ ...result, errors }, null, 2));
-      fs.writeFileSync(path.join(testDir, 'screenshot.png'), (await window.webContents.capturePage()).toPNG());
+      try { fs.writeFileSync(path.join(testDir, 'screenshot.png'), (await window.webContents.capturePage()).toPNG()); }
+      catch (error) { console.warn('SCREENSHOT_UNAVAILABLE', error.message); }
       console.log('ELECTRON_SMOKE_PASS', JSON.stringify(result));
       clearTimeout(timeout);
       app.exit(0);

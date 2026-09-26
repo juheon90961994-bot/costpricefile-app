@@ -307,3 +307,32 @@ h1 {
   .dropzone { padding-inline: 13px; gap: 11px; }
   .file-copy small { line-height: 1.45; white-space: normal; }
 }
+
+.order-lookup-section { margin-top: 36px; padding-top: 30px; border-top: 1px solid var(--line); }
+.order-lookup-section h2 { margin-bottom: 10px; }
+.order-help { color: var(--text); font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
+.order-lookup-form { width: 100%; }
+.order-lookup-form > div { grid-template-columns: 170px minmax(0, 1fr) 104px; }
+.order-lookup-form select { padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfdff; color: var(--navy); font: inherit; }
+.order-selected td { background: var(--blue-soft); }
+.order-select { padding: 8px 14px; border: 1px solid #bcd3ff; border-radius: 8px; background: var(--blue-soft); color: var(--blue); cursor: pointer; }
+.order-detail { margin-top: 24px; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: #f8fbff; }
+.order-detail h3 { margin: 0 0 18px; }
+.order-detail-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px; }
+.order-detail-fields label { min-width: 0; display: grid; gap: 8px; color: var(--text); font-size: 14px; }
+.order-detail-fields label > span { font-weight: 700; }
+.order-detail-fields label:last-child { grid-column: 1 / -1; }
+.order-detail-value { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; color: var(--navy); }
+.order-detail-fields textarea { width: 100%; resize: vertical; padding: 10px; border: 1px solid #bdd0ec; border-radius: 8px; color: var(--navy); font: inherit; }
+.order-detail-fields textarea:focus, .order-lookup-form select:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+.order-lookup-section button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 700px) {
+  .order-lookup-form > div { grid-template-columns: minmax(0, 1fr) 80px; }
+  .order-lookup-form select { grid-column: 1 / -1; min-height: 42px; }
+  .order-detail-fields { grid-template-columns: 1fr; }
+  .order-detail { padding: 16px; }
+}
+#excelArchive { margin-top: 36px; }
+#excelArchive input[type=search] { width:100%; padding:12px; margin-top:8px; }
+#excelArchive td:first-child { overflow-wrap:anywhere; }
+#excelArchive button { cursor:pointer; padding:10px 16px; }

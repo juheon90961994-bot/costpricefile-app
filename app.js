@@ -13,7 +13,7 @@ let latestDownload;
 
 const OUTPUT_HEADERS=['단계','품목','품목명','규격','소요량','담당자','주거래처','BOM구분','계정구분','현재고','단위','달러단가','원화단가','합계'];
 const SOURCE_FIELDS=['단계','품목','품목명','규격','누적실소요량',null,'주거래처','BOM구분','계정구분','현재고',null,null,null,null];
-const COLUMN_WIDTHS=[5.875,11.625,51.5,44.125,8.125,10.125,18.625,10.875,9.375,9.5,11.625,12.125,12.625,14];
+const COLUMN_WIDTHS=[5.875,11.625,35.4,44.125,8.125,10.125,18.625,10.875,9.375,9.5,11.625,12.125,12.625,14];
 const ACCOUNTING='_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-';
 const BORDER={top:{style:'thin',color:{argb:'FF000000'}},left:{style:'thin',color:{argb:'FF000000'}},bottom:{style:'thin',color:{argb:'FF000000'}},right:{style:'thin',color:{argb:'FF000000'}}};
 
@@ -51,11 +51,8 @@ drop.addEventListener('dragover',event=>{event.preventDefault();drop.classList.a
 drop.addEventListener('dragleave',()=>drop.classList.remove('dragging'));
 drop.addEventListener('drop',event=>{event.preventDefault();drop.classList.remove('dragging');choose(event.dataTransfer.files[0])});
 
-button.addEventListener('click',async()=>{
-  if(!selected)return;
-  button.disabled=true;button.firstChild.textContent='제품 원가 생성 중… ';setStatus('working','제품 BOM을 확인하고 원가를 생성하고 있어요…');
-  try{
-    const sourceBook=XLSX.read(await selected.arrayBuffer(),{type:'array',cellDates:true,raw:true});
+async function buildProductCost(file){
+    const sourceBook=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,raw:true});
     const sourceSheet=sourceBook.Sheets[sourceBook.SheetNames[0]];
     if(!sourceSheet)throw Error('워크시트가 없습니다.');
     const rows=XLSX.utils.sheet_to_json(sourceSheet,{header:1,defval:null,raw:true});
@@ -68,15 +65,16 @@ button.addEventListener('click',async()=>{
     if(missing.length)throw Error(`필수 열을 찾을 수 없습니다: ${[...new Set(missing)].join(', ')}`);
 
     if(!window.costDatabase)throw Error('Supabase 원가 조회 기능을 불러오지 못했습니다. 화면을 새로고침해 주세요.');
-    setStatus('working','Supabase cost 테이블에서 품목별 단가를 조회하고 있어요…');
+
     const unitPriceResult=await window.costDatabase.getUnitPriceMap();
     const exchangeRateResult=await getFirstUsdExchangeRate();
     let matchedPriceCount=0;
     let missingPriceCount=0;
 
+    const outputName=file.name.replace(/\.(xls|xlsx|xlsm)$/i,'')+'_제품원가.xlsx';
     const workbook=new ExcelJS.Workbook();
     workbook.calcProperties.fullCalcOnLoad=true;
-    const sheet=workbook.addWorksheet(sourceBook.SheetNames[0]||'Sheet1',{views:[{state:'frozen',xSplit:8,ySplit:3,topLeftCell:'I4',activeCell:'I4'}]});
+    const sheet=workbook.addWorksheet(getOutputSheetName(file.name),{views:[{state:'frozen',xSplit:8,ySplit:3,topLeftCell:'I4',activeCell:'I4'}]});
     sheet.addRow([]);sheet.addRow([]);sheet.addRow(OUTPUT_HEADERS);
     sheet.getCell(2,11).value='환율';
     sheet.getCell(2,12).value=exchangeRateResult.rate;
@@ -129,13 +127,33 @@ button.addEventListener('click',async()=>{
       to:{row:dataLastRow,column:14},
     };
     applyReferenceFormat(sheet,totalRow,dataLastRow);
+    sheet.getCell('A1').value=outputName.replace(/_제품원가\.xlsx$/i,'');
+    sheet.getCell('A1').font={name:'맑은 고딕',size:15};
+    sheet.getRow(1).height=24;
 
     const data=await workbook.xlsx.writeBuffer();
-    latestDownload={blob:new Blob([data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),name:`${selected.name.replace(/\.(xls|xlsx|xlsm)$/i,'')}_제품원가.xlsx`};
+
+    return {data,name:outputName,matchedPriceCount,missingPriceCount};
+}
+
+button.addEventListener('click',async()=>{
+  if(!selected)return;
+  const file=selected;
+  button.disabled=true;button.firstChild.textContent='제품 원가 생성 중… ';setStatus('working','제품 BOM과 원가 자료를 확인하고 있어요…');
+  try{
+    const result=await buildProductCost(file);
+    latestDownload={blob:new Blob([result.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),name:result.name};
     downloadResult();
-    setStatus('done',`제품 원가 생성을 완료했습니다. 단가 적용 ${matchedPriceCount}건 · 단가없음 ${missingPriceCount}건`);
+    setStatus('done',`제품 원가 생성을 완료했습니다. 단가 적용 ${result.matchedPriceCount}건 · 단가없음 ${result.missingPriceCount}건`);
   }catch(error){const message=typeof toFriendlyError==='function'?toFriendlyError(error):error.message;setStatus('error',`원가 생성 실패: ${message}`)}finally{button.disabled=false;button.firstChild.textContent='제품 원가 생성 '}
 });
+
+function getOutputSheetName(filename){
+  const base=filename.replace(/\.(xls|xlsx|xlsm)$/i,'');
+  const suffix=base.slice(base.indexOf('_')+1);
+  const clean=suffix.replace(/[\\/?:*\[\]\x00-\x1f]/g,' ').trim().replace(/^'+|'+$/g,'');
+  return (Array.from(clean).slice(0,31).join('').replace(/'+$/g,'')||'Sheet1');
+}
 
 function toExcelPrice(value){
   if(typeof value==='number')return value;
@@ -174,6 +192,7 @@ function toNumber(value){
 
 function applyReferenceFormat(sheet,lastRow,dataLastRow){
   sheet.columns.forEach((column,index)=>column.width=COLUMN_WIDTHS[index]);
+  sheet.getColumn(4).hidden=true;
   sheet.getRow(3).height=15;
   for(let row=4;row<=lastRow;row++)sheet.getRow(row).height=14.25;
   for(let row=3;row<=lastRow;row++)for(let column=1;column<=14;column++){

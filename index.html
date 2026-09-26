@@ -3,26 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Product cost Management App 4.1.0</title>
+  <title>Product cost Management App 4.1.5</title>
   <link rel="stylesheet" href="styles.css?v=20260921-2">
   <script defer src="xlsx.full.min.js"></script>
   <script defer src="exceljs.min.js"></script>
-  <script defer src="config.local.js"></script>
   <script defer src="app.js?v=20260921-1"></script>
   <script defer src="cost-upload.js?v=20260923-1"></script>
   <script defer src="cost-lookup.js?v=20260918-1"></script>
+  <script defer src="order-lookup.js?v=20260926-1"></script>
+  <script defer src="excel-archive.js"></script>
 </head>
 <body>
   <main>
     <header class="hero">
       <div class="app-icon" aria-hidden="true"><span></span><span></span><span></span></div>
       <h1>제품 원가 생성</h1>
-      <p class="app-version">Version 4.1.0</p>
+      <p class="app-version">Version 4.1.5</p>
 
       <nav class="mode-tabs" aria-label="원가 작업 메뉴">
-        <button class="mode-tab" id="tabLookup" type="button">원가 조회</button>
+        <button class="mode-tab" id="tabLookup" type="button">조회</button>
         <button class="mode-tab active" id="tabGenerate" type="button">제품 원가 생성</button>
-        <button class="mode-tab" id="tabUpload" type="button">원가 업로드</button>
+        <button class="mode-tab" id="tabUpload" type="button">업로드</button>
         <button class="mode-tab outline" id="tabDownload" type="button">원가 다운로드</button>
       </nav>
     </header>
@@ -47,20 +48,9 @@
     <section class="workspace upload-workspace" id="uploadWorkspace" hidden>
       <div class="upload-title-row">
         <h2>원가 업로드</h2>
-        <button class="settings-button" id="toggleSupabaseSettings" type="button" hidden>연결 설정</button>
       </div>
 
-      <div class="connection-settings" id="supabaseSettings" hidden>
-        <label>Supabase URL<input id="supabaseUrl" type="url" placeholder="https://프로젝트.supabase.co" autocomplete="off"></label>
-        <label>Publishable key<input id="supabaseAnonKey" type="password" placeholder="Supabase publishable key" autocomplete="off"></label>
-        <label>로그인 이메일<input id="supabaseEmail" type="email" placeholder="Supabase Auth 이메일" autocomplete="username"></label>
-        <label>로그인 비밀번호<input id="supabasePassword" type="password" placeholder="Supabase Auth 비밀번호" autocomplete="current-password"></label>
-        <button id="supabaseLogin" type="button">Supabase 로그인</button>
-        <label>Access token <small>자동 입력</small><input id="supabaseAccessToken" type="password" placeholder="로그인하면 자동으로 입력됩니다" autocomplete="off"></label>
-        <button id="saveSupabaseSettings" type="button">설정 저장</button>
-      </div>
-
-      <button class="dropzone upload-dropzone" id="costUploadDropzone" type="button">
+<button class="dropzone upload-dropzone" id="costUploadDropzone" type="button">
         <input id="costUploadInput" type="file" accept=".xls,.xlsx,.xlsm">
         <span class="file-copy">
           <strong id="costUploadFileName">업로드할 Excel 파일을 선택해 주세요</strong>
@@ -98,10 +88,27 @@
       </div>
 
       <div class="upload-result" id="uploadResult" hidden></div>
+      <section class="order-lookup-section" id="excelArchive" aria-labelledby="archiveTitle">
+        <h2 id="archiveTitle">엑셀 보관함</h2>
+        <p>엑셀 원본 파일을 보관하고 필요할 때 다운로드하세요. 첫 번째 _ 앞의 문자열이 같으면 기존 파일을 대체합니다. _가 없으면 확장자를 제외한 파일명으로 비교합니다.</p>
+        <p>지원 형식: xls, xlsx, xlsm · 최대 20MB</p>
+        <div class="lookup-actions">
+          <input id="archiveFile" type="file" accept=".xls,.xlsx,.xlsm" aria-label="보관할 엑셀 파일">
+          <button id="archiveUpload" type="button">파일 보관 / 대체</button>
+          <button id="archiveRefresh" type="button">목록 새로고침</button>
+        </div>
+        <label for="archiveSearch">보관 파일 검색</label>
+        <input id="archiveSearch" type="search" placeholder="파일명 일부 입력">
+        <p id="archiveMessage" role="status" aria-live="polite">목록 새로고침을 누르면 보관된 파일이 표시됩니다.</p>
+        <div class="lookup-table-wrap">
+          <table aria-label="보관된 엑셀 파일"><thead><tr><th>파일명</th><th>크기</th><th>최종 저장</th><th>관리</th></tr></thead><tbody id="archiveBody"></tbody></table>
+        </div>
+        <p id="archiveEmpty" hidden>표시할 보관 파일이 없습니다.</p>
+      </section>
     </section>
 
     <section class="workspace lookup-workspace" id="lookupWorkspace" hidden>
-      <h2>원가 조회</h2>
+      <h2>품목 조회</h2>
       <form class="lookup-form" id="costLookupForm">
         <label for="costLookupItem">품목</label>
         <div>
@@ -120,6 +127,41 @@
           <tbody id="costLookupBody"></tbody>
         </table>
       </div>
+      <section class="order-lookup-section" id="orderLookupSection" aria-labelledby="orderLookupTitle">
+        <h2 id="orderLookupTitle">프로젝트 · BOM 조회</h2>
+        <p class="order-help">품목, 프로젝트명 또는 세부프로젝트명의 일부를 입력하고 조회된 자료를 선택하세요.</p>
+        <form id="orderLookupForm" class="lookup-form order-lookup-form">
+          <label for="orderLookupKeyword">검색어</label>
+          <div>
+            <select id="orderLookupField" aria-label="검색 항목">
+              <option value="">전체 항목</option>
+              <option value="품목">품목</option>
+              <option value="프로젝트명">프로젝트명</option>
+              <option value="세부프로젝트명">세부프로젝트명</option>
+            </select>
+            <input id="orderLookupKeyword" type="search" placeholder="예: 품목 코드 일부, 별내선" autocomplete="off">
+            <button type="submit">조회</button>
+          </div>
+        </form>
+        <p id="orderLookupMessage" class="lookup-message" role="status" aria-live="polite"></p>
+        <div id="orderCandidates" class="lookup-table-wrap order-candidates" hidden>
+          <table aria-label="프로젝트 BOM 검색 후보">
+            <thead><tr><th>품목</th><th>품목명</th><th>프로젝트명</th><th>세부프로젝트명</th><th>선택</th></tr></thead>
+            <tbody id="orderCandidateBody"></tbody>
+          </table>
+        </div>
+        <section id="orderDetail" class="order-detail" aria-labelledby="orderDetailTitle" hidden>
+          <h3 id="orderDetailTitle">선택한 자료</h3>
+          <div id="orderDetailFields" class="order-detail-fields"></div>
+          <div class="lookup-actions">
+            <button id="orderGenerateCost" type="button">원가 생성</button>
+            <button id="orderEdit" class="lookup-edit" type="button">수정</button>
+            <button id="orderSave" class="lookup-save" type="button" hidden>저장</button>
+            <button id="orderCancel" class="lookup-cancel" type="button" hidden>취소</button>
+            <button id="orderDelete" class="lookup-delete" type="button">삭제</button>
+          </div>
+        </section>
+      </section>
     </section>
   </main>
 </body>

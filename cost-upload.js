@@ -7,8 +7,8 @@ const UNIT_COLUMN = '단위';
 const DOLLAR_PRICE_COLUMN = '달러단가';
 const PREVIEW_LIMIT = 50;
 const PAGE_SIZE = 1000;
-const DEFAULT_SUPABASE_URL = window.COST_APP_CONFIG?.supabaseUrl || '';
-const DEFAULT_SUPABASE_PUBLISHABLE_KEY = window.COST_APP_CONFIG?.supabasePublishableKey || '';
+const DEFAULT_SUPABASE_URL = 'https://lehhamzewsrayguaxpwf.supabase.co';
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_tP1gqnqoeFT6p04n59QtAQ_54lfFGa-';
 const COST_UPLOAD_COLUMNS = [
   { target: '품목명', sources: ['품목명'] },
   { target: '회사', sources: ['회사'] },
@@ -33,21 +33,12 @@ const progressBar = document.querySelector('#progressBar');
 const progressText = document.querySelector('#progressText');
 const progressPercent = document.querySelector('#progressPercent');
 const uploadResult = document.querySelector('#uploadResult');
-const settingsPanel = document.querySelector('#supabaseSettings');
-const settingsButton = document.querySelector('#toggleSupabaseSettings');
-const saveSettingsButton = document.querySelector('#saveSupabaseSettings');
-const urlInput = document.querySelector('#supabaseUrl');
-const anonKeyInput = document.querySelector('#supabaseAnonKey');
-const accessTokenInput = document.querySelector('#supabaseAccessToken');
-const emailInput = document.querySelector('#supabaseEmail');
-const passwordInput = document.querySelector('#supabasePassword');
-const loginButton = document.querySelector('#supabaseLogin');
 
 let uploadFile;
 let analysis;
 let automaticUploadRunning = false;
 
-loadConnectionSettings();
+
 
 tabUpload.addEventListener('click', () => {
   document.querySelector('#costWorkspace').hidden = true;
@@ -60,24 +51,7 @@ tabUpload.addEventListener('click', () => {
   uploadWorkspace.scrollIntoView({ behavior: 'smooth', block: 'center' });
 });
 
-settingsButton.addEventListener('click', () => {
-  settingsPanel.hidden = !settingsPanel.hidden;
-});
 
-saveSettingsButton.addEventListener('click', () => {
-  const settings = readConnectionInputs();
-  if (!settings.url || !settings.anonKey) {
-    showMessage('Supabase URL과 publishable key를 입력해 주세요.', 'error');
-    return;
-  }
-  localStorage.setItem('costUploadSupabaseUrl', settings.url);
-  localStorage.setItem('costUploadSupabaseAnonKey', settings.anonKey);
-  sessionStorage.setItem('costUploadSupabaseAccessToken', settings.accessToken);
-  settingsPanel.hidden = true;
-  showMessage('Supabase 연결 설정을 저장했습니다.', 'success');
-});
-
-loginButton.addEventListener('click', loginToSupabase);
 
 uploadDropzone.addEventListener('click', () => uploadInput.click());
 uploadInput.addEventListener('change', () => selectUploadFile(uploadInput.files[0]));
@@ -95,36 +69,15 @@ uploadDropzone.addEventListener('drop', event => {
 analyzeButton.addEventListener('click', analyzeUpload);
 executeButton.addEventListener('click', executeUpload);
 
-function loadConnectionSettings() {
-  urlInput.value = localStorage.getItem('costUploadSupabaseUrl') || DEFAULT_SUPABASE_URL;
-  anonKeyInput.value = localStorage.getItem('costUploadSupabaseAnonKey') || DEFAULT_SUPABASE_PUBLISHABLE_KEY;
-  accessTokenInput.value = sessionStorage.getItem('costUploadSupabaseAccessToken') || '';
-  if (!urlInput.value || !anonKeyInput.value) {
-    settingsButton.hidden = false;
-    settingsPanel.hidden = false;
-  }
-}
-
-function readConnectionInputs() {
+function getConnectionSettings() {
+  // Public client credentials; database RLS policies control allowed operations.
+  // Do not reuse saved URLs or expired login tokens from older app versions.
   return {
-    url: urlInput.value.trim().replace(/\/$/, ''),
-    anonKey: anonKeyInput.value.trim(),
-    accessToken: accessTokenInput.value.trim(),
+    url: DEFAULT_SUPABASE_URL,
+    anonKey: DEFAULT_SUPABASE_PUBLISHABLE_KEY,
+    accessToken: '',
   };
 }
-
-function getConnectionSettings() {
-  const settings = readConnectionInputs();
-  if (!settings.url || !settings.anonKey) {
-    settingsPanel.hidden = false;
-    throw new Error('Supabase 연결 설정을 먼저 입력해 주세요.');
-  }
-  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(settings.url)) {
-    throw new Error('Supabase URL 형식을 확인해 주세요.');
-  }
-  return settings;
-}
-
 async function selectUploadFile(file) {
   if (!file) return;
   if (automaticUploadRunning) {
@@ -362,36 +315,6 @@ async function executeUpload() {
   executeButton.disabled = false;
 }
 
-async function loginToSupabase() {
-  const settings = getConnectionSettings();
-  const email = emailInput.value.trim();
-  const password = passwordInput.value;
-  if (!email || !password) {
-    showMessage('Supabase 로그인 이메일과 비밀번호를 입력해 주세요.', 'error');
-    return;
-  }
-  setBusy(loginButton, true, '로그인 중…');
-  try {
-    const response = await fetch(`${settings.url}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: { apikey: settings.anonKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.access_token) {
-      throw new Error(result.msg || result.message || '이메일 또는 비밀번호를 확인해 주세요.');
-    }
-    accessTokenInput.value = result.access_token;
-    sessionStorage.setItem('costUploadSupabaseAccessToken', result.access_token);
-    passwordInput.value = '';
-    showMessage('Supabase 로그인에 성공했습니다. 이제 업로드를 실행할 수 있습니다.', 'success');
-  } catch (error) {
-    showMessage(`Supabase 로그인 실패: ${error.message}`, 'error');
-  } finally {
-    setBusy(loginButton, false, 'Supabase 로그인');
-  }
-}
-
 async function fetchAllCostRows(settings) {
   const rows = [];
   for (let start = 0; ; start += PAGE_SIZE) {
@@ -550,7 +473,7 @@ function toFriendlyError(error) {
     return 'Supabase cost 테이블의 수정 권한이 없습니다. anon 역할의 UPDATE 권한과 RLS 정책을 확인해 주세요.';
   }
   if (error?.status === 401 || error?.status === 403 || /permission|policy|rls|row-level security/i.test(message)) {
-    return 'Supabase 접근 권한이 없습니다. 로그인 상태와 cost 테이블의 RLS 정책을 확인해 주세요.';
+    return 'Supabase 접근 권한이 없습니다. cost 테이블의 공개 접근 정책을 확인해 주세요.';
   }
   if (error?.status === 409 || error?.code === '23505' || /duplicate|unique/i.test(message)) {
     return '동일한 품목이 이미 존재하여 등록할 수 없습니다. cost 테이블의 품목 고유 제약을 확인해 주세요.';
@@ -565,7 +488,7 @@ function toFriendlyError(error) {
     return `Supabase 컬럼 오류${code}: ${message}`;
   }
   if (/Failed to fetch|NetworkError/i.test(message)) {
-    return 'Supabase에 연결할 수 없습니다. URL과 네트워크 상태를 확인해 주세요.';
+    return 'Supabase에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.';
   }
   return message;
 }
@@ -575,7 +498,7 @@ window.costDatabase = {
     const settings = getConnectionSettings();
     const rows = await fetchUnitPriceRows(settings);
     if (!rows.length) {
-      throw new Error('cost 테이블에서 조회된 데이터가 없습니다. 데이터가 존재한다면 SELECT RLS 정책 또는 사용자 access token을 확인해 주세요.');
+      throw new Error('cost 테이블에서 조회된 데이터가 없습니다. 데이터가 존재한다면 공개 조회 정책을 확인해 주세요.');
     }
     const prices = new Map();
     const records = new Map();

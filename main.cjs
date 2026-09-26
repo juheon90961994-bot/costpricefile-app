@@ -3,6 +3,8 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 const https = require("node:https");
 
+// Keep the existing 4.1.0 profile (saved connection settings) across upgrades.
+app.setName("Product cost Management App 4.1.0");
 if (require("electron-squirrel-startup")) app.quit();
 
 function createWindow() {
@@ -13,7 +15,7 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: "#f7faff",
     autoHideMenuBar: true,
-    title: "Product cost Management App 4.1.0",
+    title: "Product cost Management App 4.1.5",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -32,9 +34,9 @@ ipcMain.handle("save-excel-file", async (event, { data, defaultName }) => {
   const parent = BrowserWindow.fromWebContents(event.sender);
   const safeName = path.basename(defaultName || "단가표.xlsx");
   const result = await dialog.showSaveDialog(parent, {
-    title: "원가 단가표 저장",
+    title: "Excel 파일 저장",
     defaultPath: path.join(app.getPath("downloads"), safeName),
-    filters: [{ name: "Excel 통합 문서", extensions: ["xlsx"] }],
+    filters: [{ name: "Excel 통합 문서", extensions: [/^\.(xlsx|xls|xlsm)$/i.test(path.extname(safeName)) ? path.extname(safeName).slice(1).toLowerCase() : "xlsx"] }],
     properties: ["showOverwriteConfirmation", "createDirectory"],
   });
   if (result.canceled || !result.filePath) return { canceled: true };
