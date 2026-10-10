@@ -8,7 +8,8 @@ function load(request = async () => []) {
   const element = () => ({ addEventListener() {}, value: '', hidden: false });
   const context = vm.createContext({
     URL, AbortController, setTimeout, clearTimeout,
-    document: { querySelector: element }, window: {},
+    document: { querySelector: element, getElementById: element }, window: {},
+    tabGenerate:element(),tabUpload:element(),tabDownload:element(),tabLookup:element(),
     getConnectionSettings: () => ({url:'https://test.supabase.co'}),
     supabaseRequest: request,
   });

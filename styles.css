@@ -286,6 +286,8 @@ h1 {
 .lookup-actions button { min-height: 36px; padding: 0 11px; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; }
 .lookup-edit, .lookup-save { color: var(--blue); background: var(--blue-soft); border: 1px solid #bcd3ff; }
 .lookup-delete { color: #bd3030; background: #fff5f5; border: 1px solid #f0c1c1; }
+.lookup-sale-price { color: var(--blue); background: var(--blue-soft); border: 1px solid #bcd3ff; }
+.lookup-actions button:disabled { color: #8b96a8; background: #eef1f5; border-color: #dfe4eb; cursor: not-allowed; }
 .lookup-cancel { color: var(--text); background: var(--white); border: 1px solid var(--line); }
 
 @media (max-width: 700px) {

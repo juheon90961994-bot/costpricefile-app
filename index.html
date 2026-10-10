@@ -12,6 +12,11 @@
   <script defer src="cost-lookup.js?v=20260918-1"></script>
   <script defer src="order-lookup.js?v=20260926-1"></script>
   <script defer src="excel-archive.js"></script>
+  <script defer src="competition-format.js"></script>
+  <script defer src="cost-competitiveness.js"></script>
+  <script defer src="competition-lookup.js"></script>
+  <script defer src="comparison-format.js"></script>
+  <script defer src="cost-comparison.js"></script>
 </head>
 <body>
   <main>
@@ -21,14 +26,21 @@
       <p class="app-version">Version 4.1.10</p>
 
       <nav class="mode-tabs" aria-label="원가 작업 메뉴">
-        <button class="mode-tab" id="tabLookup" type="button">조회</button>
-        <button class="mode-tab active" id="tabGenerate" type="button">제품 원가 생성</button>
+        <button class="mode-tab active" id="tabLookup" type="button">조회</button>
+        <button class="mode-tab" id="tabGenerate" type="button">제품 원가 생성</button>
         <button class="mode-tab" id="tabUpload" type="button">업로드</button>
         <button class="mode-tab outline" id="tabDownload" type="button">원가 다운로드</button>
+        <button class="mode-tab" id="tabCompetitiveness" type="button">원가경쟁력 자료</button>
       </nav>
     </header>
 
-    <section class="workspace" id="costWorkspace">
+    <section class="workspace" id="competitivenessWorkspace" hidden>
+      <h2>원가경쟁력 자료</h2>
+      <input id="competitivenessInput" type="file" accept=".xls,.xlsx,.xlsm" hidden>
+      <div style="display:flex;gap:12px;align-items:center"><button id="competitivenessUpload" type="button" class="convert">[1]원가계산현황 변환</button><button id="comparisonOpen" type="button" class="convert">[3] 비교표 작성</button></div>
+      <p id="competitivenessMessage" role="status">원가계산현황 엑셀의 Sheet1을 업로드해 주세요.</p>
+    </section>
+    <section class="workspace" id="costWorkspace" hidden>
       <h2>제품 BOM 올리기</h2>
 
       <button class="dropzone" id="dropzone" type="button">
@@ -107,7 +119,7 @@
       </section>
     </section>
 
-    <section class="workspace lookup-workspace" id="lookupWorkspace" hidden>
+    <section class="workspace lookup-workspace" id="lookupWorkspace">
       <h2>품목 조회</h2>
       <form class="lookup-form" id="costLookupForm">
         <label for="costLookupItem">품목</label>

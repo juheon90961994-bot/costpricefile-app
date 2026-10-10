@@ -94,19 +94,64 @@ function buildLookupRow(row, index) {
   tr.append(buildActionCell([
     ['수정', 'lookup-edit', () => { editingLookupKey = key; renderLookupRows(); }],
     ['삭제', 'lookup-delete', () => deleteLookupRow(row)],
+    ['판매가 조회', 'lookup-sale-price', event => lookupSalePrice(row, event.currentTarget), !canLookupSalePrice(row)],
   ]));
   return tr;
+}
+
+function canLookupSalePrice(row) {
+  const company = String(row['회사'] ?? '').normalize('NFKC').trim();
+  const item = normalizeItemKey(row[ITEM_COLUMN]);
+  const hyphens = (item.slice(1, -1).match(/-/g) || []).length;
+  return company === '에이텍컴퓨터' && hyphens >= 2;
+}
+
+function getSaleModel(item) {
+  const value = normalizeItemKey(item);
+  const first = value.indexOf('-');
+  const second = value.indexOf('-', first + 1);
+  if (first <= 0 || second <= first + 1) throw new Error('제품 품목의 두 번째 하이픈 위치를 확인해 주세요.');
+  return value.slice(0, second);
+}
+
+async function lookupSalePrice(row, button) {
+  if (!canLookupSalePrice(row)) return;
+  const sequence = lookupSequence;
+  button.disabled = true;
+  button.textContent = '조회 중…';
+  try {
+    const model = getSaleModel(row[ITEM_COLUMN]);
+    showLookupMessage(`${model} 나라장터 판매가를 조회하고 있습니다…`);
+    if (!window.desktopSales?.lookup) throw new Error('판매가 자동 조회는 Windows 앱에서 실행해 주세요.');
+    const result = await window.desktopSales.lookup(model);
+    if (sequence !== lookupSequence) return;
+    if (!result.products.length) {
+      showLookupMessage(`${model}과 정확히 일치하는 나라장터 상품이 없습니다.`, 'error');
+      return;
+    }
+    const prices = result.products.map(product => `${product.price.toLocaleString('ko-KR')}원${product.itemId ? ' (식별번호 ' + product.itemId + ')' : ''}`).join(' / ');
+    showLookupMessage(`${model} 판매가: ${prices} · 나라장터 쇼핑몰 · ${new Date(result.checkedAt).toLocaleString('ko-KR')}`, 'success');
+  } catch (error) {
+    if (sequence === lookupSequence) showLookupMessage('판매가 조회 실패: ' + error.message, 'error');
+  } finally {
+    button.disabled = !canLookupSalePrice(row);
+    button.textContent = '판매가 조회';
+  }
 }
 
 function buildActionCell(actions) {
   const td = document.createElement('td');
   const wrap = document.createElement('div');
   wrap.className = 'lookup-actions';
-  actions.forEach(([label, className, handler]) => {
+  actions.forEach(([label, className, handler, disabled = false]) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = className;
     button.textContent = label;
+    button.disabled = disabled;
+    if (className === 'lookup-sale-price') button.title = disabled
+      ? '회사: 에이텍컴퓨터, 품목 중간의 하이픈 2개 이상인 제품만 조회할 수 있습니다.'
+      : '제품 판매가 조회';
     button.addEventListener('click', handler);
     wrap.append(button);
   });

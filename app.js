@@ -65,7 +65,7 @@ drop.addEventListener('dragover',event=>{event.preventDefault();drop.classList.a
 drop.addEventListener('dragleave',()=>drop.classList.remove('dragging'));
 drop.addEventListener('drop',event=>{event.preventDefault();drop.classList.remove('dragging');chooseFiles(event.dataTransfer.files)});
 
-async function buildProductCost(file){
+async function buildProductCost(file,options={}){
     const sourceBook=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,raw:true});
     const sourceSheet=sourceBook.Sheets[sourceBook.SheetNames[0]];
     if(!sourceSheet)throw Error('워크시트가 없습니다.');
@@ -119,17 +119,18 @@ async function buildProductCost(file){
     const dataLastRow=sheet.rowCount;
     for(let row=4;row<=dataLastRow;row++){
       const bomType=String(sheet.getCell(row,8).value??'').normalize('NFKC').trim();
-      if(bomType==='도급'){
+      if(bomType==='도급' || (options.competitiveness && String(sheet.getCell(row,9).value??'').normalize('NFKC').trim()==='소모품')){
         sheet.getCell(row,14).value=0;
         continue;
       }
       const quantity=toNumber(sheet.getCell(row,5).value);
       const unit=String(sheet.getCell(row,11).value??'').normalize('NFKC').trim().toUpperCase();
-      const priceColumn=unit==='USD'?12:13;
+      const useUsd=unit==='USD'&&!options.competitiveness;
+      const priceColumn=useUsd?12:13;
       const price=toNumber(sheet.getCell(row,priceColumn).value);
-      const exchangeRate=unit==='USD'?exchangeRateResult.rate:1;
+      const exchangeRate=useUsd?exchangeRateResult.rate:1;
       sheet.getCell(row,14).value=quantity!==null&&price!==null
-        ?{formula:unit==='USD'?`L${row}*E${row}*$L$2`:`E${row}*M${row}`,result:quantity*price*exchangeRate}
+        ?{formula:useUsd?`L${row}*E${row}*$L$2`:`E${row}*M${row}`,result:quantity*price*exchangeRate}
         :'단가없음';
     }
     const totalRow=dataLastRow+1;
@@ -254,7 +255,7 @@ function multiCostFilename(rows,files){
   return stem+'_멀티원가분석.xlsx';
 }
 
-async function buildCostFiles(files,rows,onProgress=()=>{}){
+async function buildCostFiles(files,rows,onProgress=()=>{},options={}){
   if(!files.length)throw new Error('BOM 파일을 선택해 주세요.');
   const combined=new ExcelJS.Workbook();combined.calcProperties.fullCalcOnLoad=true;
   const used=new Set();
@@ -262,7 +263,7 @@ async function buildCostFiles(files,rows,onProgress=()=>{}){
   for(let index=0;index<files.length;index++){
     onProgress(index+1,files.length);
     let result;
-    try{result=await buildProductCost(files[index]);}catch(error){throw new Error(files[index].name+': '+error.message);}
+    try{result=await buildProductCost(files[index],options);}catch(error){throw new Error(files[index].name+': '+error.message);}
     matchedPriceCount+=result.matchedPriceCount;missingPriceCount+=result.missingPriceCount;
     const original=result.workbook.worksheets[0];
     const base=original.name;let name=base,number=2;

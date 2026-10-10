@@ -120,3 +120,8 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+ipcMain.handle('convert-legacy-excel', (_event, data) => require('./legacy-excel.cjs')(data));
+ipcMain.handle('lookup-g2b-sale-price', async (_event, model) => {
+  return require('./g2b-sales.cjs').lookup(BrowserWindow, model);
+});

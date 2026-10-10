@@ -345,13 +345,14 @@ document.querySelector('#orderMultiGenerate').addEventListener('click',async()=>
 });
 
 // Capture navigation before existing tab handlers change the active tab.
-for(const tab of [tabGenerate,tabUpload,tabDownload,tabLookup]){
+for(const tab of [tabGenerate,tabUpload,tabDownload,tabLookup,document.getElementById('tabCompetitiveness')]){
   tab.addEventListener('click',event=>{
     if(tab.classList.contains('active'))return;
-    if(orderMutating || lookupMutating || automaticUploadRunning || uploadOperations>0 || ExcelArchive.isBusy()){
+    if(comparisonBusy || window.competitionLookup?.isBusy() || competitivenessBusy || orderMutating || lookupMutating || uploadAnalysisRunning || uploadOperations>0 || ExcelArchive.isBusy()){
       event.preventDefault();event.stopImmediatePropagation();
       window.alert('진행 중인 작업이 완료된 후 메뉴를 이동해 주세요.');return;
     }
+    window.competitionLookup?.reset();
     resetUploadView();ExcelArchive.resetView();
     lookupSequence++;
     lookupRows=[];editingLookupKey=null;lookupInput.value='';

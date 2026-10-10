@@ -36,7 +36,7 @@ const uploadResult = document.querySelector('#uploadResult');
 
 let uploadFile;
 let analysis;
-let automaticUploadRunning = false;
+let uploadAnalysisRunning = false;
 let uploadOperations=0;
 
 
@@ -81,8 +81,8 @@ function getConnectionSettings() {
 }
 async function selectUploadFile(file) {
   if (!file) return;
-  if (automaticUploadRunning) {
-    showMessage('현재 파일을 업로드하고 있습니다. 완료 후 다시 선택해 주세요.');
+  if (uploadAnalysisRunning || uploadOperations > 0) {
+    showMessage('현재 파일을 처리하고 있습니다. 완료 후 다시 선택해 주세요.');
     return;
   }
   if (!/\.(xls|xlsx|xlsm)$/i.test(file.name)) {
@@ -91,21 +91,19 @@ async function selectUploadFile(file) {
   }
   uploadFile = file;
   analysis = undefined;
+  executeButton.disabled = true;
   uploadFileName.textContent = file.name;
   analyzeButton.disabled = false;
   preview.hidden = true;
   progressPanel.hidden = true;
   uploadResult.hidden = true;
   showMessage('파일을 확인하고 있습니다.');
-  automaticUploadRunning = true;
+  uploadAnalysisRunning = true;
   uploadInput.disabled = true;
   try {
     await analyzeUpload();
-    if (analysis && (analysis.updates.length || analysis.inserts.length)) {
-      await executeUpload();
-    }
   } finally {
-    automaticUploadRunning = false;
+    uploadAnalysisRunning = false;
     uploadInput.disabled = false;
   }
 }
@@ -126,7 +124,7 @@ async function analyzeUploadInternal() {
     const databaseRows = await fetchAllCostRows(settings);
     analysis = classifyRows(excel, databaseRows);
     renderAnalysis(analysis);
-    showMessage(`분석 완료 · 전체 ${analysis.items.length}건 · 수정 ${analysis.updates.length}건`, 'success');
+    showMessage(`분석 완료 · 전체 ${analysis.items.length}건 · 수정 ${analysis.updates.length}건 · 신규 ${analysis.inserts.length}건. DB에 반영하려면 업로드 실행 버튼을 눌러 주세요.`, 'success');
   } catch (error) {
     showMessage(toFriendlyError(error), 'error');
   } finally {
@@ -503,6 +501,39 @@ function toFriendlyError(error) {
 }
 
 window.costDatabase = {
+  async updateMaterialCosts(entries) {
+    const settings=getConnectionSettings();
+    const rows=await fetchAllCostRows(settings);
+    const stored=new Map(),groups=new Map();
+    for(const row of rows){
+      const key=normalizeItemKey(row[ITEM_COLUMN]);
+      if(!stored.has(key))stored.set(key,[]);
+      stored.get(key).push(row);
+    }
+    for(const entry of entries){
+      const key=normalizeItemKey(entry.item);
+      if(!groups.has(key))groups.set(key,[]);
+      groups.get(key).push(entry.price);
+    }
+    const result={updated:0,unchanged:0,unmatched:0,review:0,failed:0,errors:[]};
+    for(const [item,prices] of groups){
+      // A missing quantity produces text; never coerce it (or a blank) to zero.
+      if(!item||prices.some(price=>typeof price!=='number'||!Number.isFinite(price)||price<0)||new Set(prices).size!==1){result.review++;continue;}
+      const matches=stored.get(item)||[];
+      if(!matches.length){result.unmatched++;continue;}
+      if(matches.length!==1){result.review++;continue;}
+      const row=matches[0],price=prices[0];
+      if(valuesEqual(price,row[PRICE_COLUMN])){result.unchanged++;continue;}
+      try{
+        await updateCostRow(settings,{item,databaseId:row.id,databaseItem:row[ITEM_COLUMN],payload:{[PRICE_COLUMN]:price}});
+        result.updated++;
+      }catch(error){
+        result.failed++;
+        if(result.errors.length<3)result.errors.push(item+': '+toFriendlyError(error));
+      }
+    }
+    return result;
+  },
   async getUnitPriceMap() {
     const settings = getConnectionSettings();
     const rows = await fetchUnitPriceRows(settings);
