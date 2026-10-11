@@ -17,6 +17,8 @@
   <script defer src="competition-lookup.js"></script>
   <script defer src="comparison-format.js"></script>
   <script defer src="cost-comparison.js"></script>
+  <script defer src="representative-format.js"></script>
+  <script defer src="representative-model.js"></script>
 </head>
 <body>
   <main>
@@ -39,6 +41,15 @@
       <input id="competitivenessInput" type="file" accept=".xls,.xlsx,.xlsm" hidden>
       <div style="display:flex;gap:12px;align-items:center"><button id="competitivenessUpload" type="button" class="convert">[1]원가계산현황 변환</button><button id="comparisonOpen" type="button" class="convert">[3] 비교표 작성</button></div>
       <p id="competitivenessMessage" role="status">원가계산현황 엑셀의 Sheet1을 업로드해 주세요.</p>
+      <section class="workspace" id="representativeSection">
+        <h2>대표모델 자료</h2>
+        <form id="representativeForm">
+          <label for="representativeItem">품번</label>
+          <input id="representativeItem" type="text" required placeholder="보관 BOM 파일의 _ 앞 품번을 입력해 주세요">
+          <button id="representativeGenerate" class="convert" type="submit">조회 및 대표모델 자료 다운로드</button>
+        </form>
+        <p id="representativeMessage" role="status"></p>
+      </section>
     </section>
     <section class="workspace" id="costWorkspace" hidden>
       <h2>제품 BOM 올리기</h2>
