@@ -1,9 +1,10 @@
 const {app,session,ipcMain}=require('electron'),fs=require('fs'),path=require('path');
-app.setPath('userData',path.join(__dirname,'../work/representative-test'));
+app.setPath('userData',path.join(__dirname,'../work/representative-test-'+process.pid));
 setTimeout(()=>app.exit(1),60000);
 app.whenReady().then(()=>session.defaultSession.webRequest.onBeforeRequest({urls:['http://*/*','https://*/*']},(_,cb)=>cb({cancel:true})));
 app.on('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',async()=>{try{
  const bytes=fs.readFileSync(path.join(__dirname,'../work/representative-reference.xlsx')).toString('base64');
+ const styleBytes=fs.readFileSync(path.join(__dirname,'../work/representative-style-reference.xlsx')).toString('base64');
  let saved;
  ipcMain.removeHandler('save-excel-file');ipcMain.handle('save-excel-file',(_,data)=>{saved=data;return {canceled:false};});
  console.log(await win.webContents.executeJavaScript(`(async()=>{
@@ -12,7 +13,8 @@ app.on('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',
  const bytes=Uint8Array.from(atob(${JSON.stringify(bytes)}),c=>c.charCodeAt(0));
  const file=new File([bytes],'MODEL_샘플.xlsx');
  const original=new ExcelJS.Workbook();await original.xlsx.load(bytes);
- const ref=original.getWorksheet('변환본');
+ const styleBook=new ExcelJS.Workbook();await styleBook.xlsx.load(Uint8Array.from(atob(${JSON.stringify(styleBytes)}),c=>c.charCodeAt(0)));
+ const ref=styleBook.worksheets[0];
  const items=XLSX.utils.sheet_to_json(XLSX.read(bytes).Sheets['원본']).filter(row=>row['품목']);
  const records=new Map(items.map(row=>[normalizeItemKey(row['품목']),{'거래처명':'최신 거래처','원화단가':100,'달러단가':2}]));
  let calls=0;window.costDatabase.getUnitPriceMap=async()=>{calls++;return {records};};
@@ -21,18 +23,34 @@ app.on('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',
  check(result.count===28 && result.warnings===0,'All BOM rows');
  check(s.getCell('F4').value==='9월 예상가'&&s.getCell('K4').value==='10월'&&s.getCell('N4').value==='11월'&&s.getCell('Q4').value==='12월','Months');
  check(s.getCell('D5').value==='최신 거래처'&&s.getCell('I5').value===2&&s.getCell('P5').value===100,'Latest cost mapping');
- check(s.getCell('F7').value.formula==='J7*C7'&&s.getCell('F7').value.result===200,'Net quantity multiplication');
- check(s.getCell('F33').value.formula==='SUM(F5:F32)','Totals');
+ check(s.getCell('H7').value.formula==='C7*G7'&&s.getCell('H7').value.result===200,'Net quantity multiplication');
+ check(s.getCell('H33').value.formula==='SUM(H5:H32)','Totals');
+ check(s.autoFilter==='A4:Q32','Filter includes headers and all items, excludes total');
+ for(let r=5;r<=33;r++)check(s.getCell('F'+r).value===null,'F remains blank');
+ for(let r=5;r<=32;r++)check(s.getCell('G'+r).numFmt===s.getCell('J'+r).numFmt,'G number format');
+ for(const col of ['H','K','N','Q'])check(s.getCell(col+'3').value===1360,'Exchange rate');
+ check(s.getCell('G5').value===100,'G won price');
+ for(const col of ['K','N','Q'])check(s.getCell(col+'7').value.result===5440&&s.getCell(col+'7').value.formula.includes('$'+col+'$3'),'USD amount and rate reference');
  check(s.getCell('A1').value==='대표모델 재료비'&&s.getCell('A4').value==='품목','Header alignment');
- for(let r=1;r<=33;r++)for(let c=1;c<=17;c++)check(canonical(s.getCell(r,c).style)===canonical(ref.getCell(r,c).style),'Style '+r+':'+c);
+ for(let r=1;r<=33;r++)for(let c=1;c<=17;c++){
+ const expected=structuredClone(ref.getCell(r,c).style);
+ expected.protection={locked:false};
+ if(r===3&&c===17)expected.fill=structuredClone(ref.getCell('N3').fill);
+ if(c===7&&r>=5&&r<=32)expected.numFmt=ref.getCell(r,10).numFmt;
+ if(r>=5&&r<=32&&[10,13,16].includes(c)&&['DRU0-0012A','SENM-0016A'].includes(s.getCell(r,1).value))expected.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};
+ check(canonical(s.getCell(r,c).style)===canonical(expected),'Style '+r+':'+c);
+ }
  check(JSON.stringify(s.views)===JSON.stringify(ref.views),'Freeze panes');
  for(let c=1;c<=17;c++)check(s.getColumn(c).width===ref.getColumn(c).width,'Width');
  const next=await buildRepresentativeModel(file,new Date(2027,0,1));const nw=new ExcelJS.Workbook();await nw.xlsx.load(next.data);
  check(nw.worksheets[0].getCell('F4').value==='12월 예상가'&&nw.worksheets[0].getCell('Q4').value==='3월','Year rollover');
  records.get(normalizeItemKey(items[0]['품목']))['원화단가']=0;
+ records.get(normalizeItemKey(items[0]['품목']))['달러단가']=null;
+ records.get(normalizeItemKey(items[2]['품목']))['달러단가']=null;
  records.delete(normalizeItemKey(items[1]['품목']));
  const missing=await buildRepresentativeModel(file);const mw=new ExcelJS.Workbook();await mw.xlsx.load(missing.data);
- check(missing.warnings===1&&(mw.worksheets[0].getCell('F5').value.result??0)===0&&mw.worksheets[0].getCell('J5').value===0&&mw.worksheets[0].getCell('F6').value==='단가없음','Missing and zero');
+ check(missing.warnings===1&&(mw.worksheets[0].getCell('H5').value.result??0)===0&&mw.worksheets[0].getCell('G5').value===0&&mw.worksheets[0].getCell('H6').value==='단가없음','Missing and zero');
+ check(mw.worksheets[0].getCell('K7').value.result===200&&mw.worksheets[0].getCell('Q6').value.result==='단가없음','KRW fallback and missing monthly price');
  ExcelArchive.readForItem=async item=>{check(item==='MODEL','Archive key');return file;};
  document.getElementById('tabCompetitiveness').click();
  document.getElementById('representativeItem').value='MODEL';document.getElementById('representativeForm').requestSubmit();
@@ -40,6 +58,22 @@ app.on('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',
  check(document.getElementById('representativeMessage').textContent.includes('28개 품목 저장 완료'),'UI save');
  document.getElementById('tabLookup').click();check(document.getElementById('representativeItem').value==='','Navigation reset');
  check(calls===4,'Fresh DB snapshot each generation');
+ check(s.getCell('K41').formula==='INT(((J39*K39)+(J40*K40))/(J39+J40))','Supplementary formula');
+ check(s.getCell('N39').protection?.locked!==false&&s.getCell('Q42').protection?.locked!==false&&!s.getCell('J39').protection.locked,'Selective locking');
+ const specialBook=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(specialBook,XLSX.utils.aoa_to_sheet([
+ ['품목','품목명','누적정미수량','주거래처','계정구분'],
+ ['PACS-0002A','Special',2,'Old','원자재'],['OTHER','Normal',3,'Old','원자재']]),'원본');
+ records.set('PACS-0002A',{'원화단가':1234,'달러단가':null,'거래처명':'DB supplier'});
+ records.set('OTHER',{'원화단가':2345,'달러단가':null});
+ const specialFile=new File([XLSX.write(specialBook,{type:'array',bookType:'xlsx'})],'special.xlsx');
+ const special=await buildRepresentativeModel(specialFile);const sw=new ExcelJS.Workbook();await sw.xlsx.load(special.data);const ss=sw.worksheets[0];
+ for(const col of ['J','M','P'])check(ss.getCell(col+'5').value===850&&ss.getCell(col+'6').value===2345,'Only special monthly won override');
+ check(ss.getCell('G5').value===1234&&ss.getCell('H5').value.result===2468&&ss.getCell('D5').value==='DB supplier','Other columns retain DB values');
+ check(ss.getCell('K5').value.result===1700&&ss.getCell('Q7').value.result===8735,'Override formulas and totals');
+ records.get('PACS-0002A')['달러단가']=2;
+ const dollar=await buildRepresentativeModel(specialFile);const dw=new ExcelJS.Workbook();await dw.xlsx.load(dollar.data);
+ check(dw.worksheets[0].getCell('K5').value.result===5440&&dw.worksheets[0].getCell('J5').value===850,'USD priority retained');
  return 'PASS: sample 28 rows, all cell styles, widths, frozen panes, latest prices, quantity formula, year rollover, missing/zero price, UI download/reset';
  })()`));
  if(!saved?.data?.length)throw Error('Missing saved output');
