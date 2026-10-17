@@ -21,7 +21,7 @@ app.on('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',
  const result=await buildRepresentativeModel(file,new Date(2026,9,11));
  const out=new ExcelJS.Workbook();await out.xlsx.load(result.data);const s=out.worksheets[0];
  check(result.count===28 && result.warnings===0,'All BOM rows');
- check(s.getCell('F4').value==='9월 예상가'&&s.getCell('K4').value==='10월'&&s.getCell('N4').value==='11월'&&s.getCell('Q4').value==='12월','Months');
+ check(s.getCell('F4').value==='9월 예상가'&&s.getCell('H4').value==='9월'&&s.getCell('K4').value==='10월'&&s.getCell('N4').value==='11월'&&s.getCell('Q4').value==='12월','Months');
  check(s.getCell('D5').value==='최신 거래처'&&s.getCell('I5').value===2&&s.getCell('P5').value===100,'Latest cost mapping');
  check(s.getCell('H7').value.formula==='C7*G7'&&s.getCell('H7').value.result===200,'Net quantity multiplication');
  check(s.getCell('H33').value.formula==='SUM(H5:H32)','Totals');
@@ -51,11 +51,15 @@ app.on('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',
  const missing=await buildRepresentativeModel(file);const mw=new ExcelJS.Workbook();await mw.xlsx.load(missing.data);
  check(missing.warnings===1&&(mw.worksheets[0].getCell('H5').value.result??0)===0&&mw.worksheets[0].getCell('G5').value===0&&mw.worksheets[0].getCell('H6').value==='단가없음','Missing and zero');
  check(mw.worksheets[0].getCell('K7').value.result===200&&mw.worksheets[0].getCell('Q6').value.result==='단가없음','KRW fallback and missing monthly price');
- ExcelArchive.readForItem=async item=>{check(item==='MODEL','Archive key');return file;};
+ ExcelArchive.list=async()=>[{filename:'MODEL_샘플.xlsx'},{filename:'MODEL2_샘플.xlsx'}];
+ ExcelArchive.readForItem=async item=>{check(['MODEL','MODEL2'].includes(item),'Archive key');return new File([bytes],item+'_샘플.xlsx');};
  document.getElementById('tabCompetitiveness').click();
- document.getElementById('representativeItem').value='MODEL';document.getElementById('representativeForm').requestSubmit();
+ document.getElementById('representativeItem').value='MODEL';document.getElementById('representativeSearch').click();
  for(let i=0;i<300&&window.representativeModel.isBusy();i++)await new Promise(r=>setTimeout(r,20));
- check(document.getElementById('representativeMessage').textContent.includes('28개 품목 저장 완료'),'UI save');
+ for(const checkbox of document.querySelectorAll('#representativeResults input'))checkbox.click();
+ document.getElementById('representativeForm').requestSubmit();
+ for(let i=0;i<300&&window.representativeModel.isBusy();i++)await new Promise(r=>setTimeout(r,20));
+ check(document.getElementById('representativeMessage').textContent.includes('2개 시트 · 56개 품목 저장 완료'),'UI multi-sheet save');
  document.getElementById('tabLookup').click();check(document.getElementById('representativeItem').value==='','Navigation reset');
  check(calls===4,'Fresh DB snapshot each generation');
  check(s.getCell('K41').formula==='INT(((J39*K39)+(J40*K40))/(J39+J40))','Supplementary formula');

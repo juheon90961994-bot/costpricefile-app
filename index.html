@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Product cost Management App 4.1.10</title>
+  <title>Product cost Management App 7.0.10</title>
   <link rel="stylesheet" href="styles.css?v=20260921-2">
   <script defer src="xlsx.full.min.js"></script>
   <script defer src="exceljs.min.js"></script>
@@ -26,7 +26,7 @@
     <header class="hero">
       <div class="app-icon" aria-hidden="true"><span></span><span></span><span></span></div>
       <h1>제품 원가 생성</h1>
-      <p class="app-version">Version 4.1.10</p>
+      <p class="app-version">Version 7.0.10</p>
 
       <nav class="mode-tabs" aria-label="원가 작업 메뉴">
         <button class="mode-tab active" id="tabLookup" type="button">조회</button>
@@ -40,14 +40,25 @@
     <section class="workspace" id="competitivenessWorkspace" hidden>
       <h2>원가경쟁력 자료</h2>
       <input id="competitivenessInput" type="file" accept=".xls,.xlsx,.xlsm" hidden>
-      <div style="display:flex;gap:12px;align-items:center"><button id="competitivenessUpload" type="button" class="convert">[1]원가계산현황 변환</button><button id="comparisonOpen" type="button" class="convert">[3] 비교표 작성</button></div>
-      <p id="competitivenessMessage" role="status">원가계산현황 엑셀의 Sheet1을 업로드해 주세요.</p>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <button id="competitivenessUpload" type="button" class="convert">[1]원가계산현황 변환</button>
+          <p id="competitivenessMessage" role="status">원가계산현황 포멧 변경</p>
+        </div>
+        <div style="flex:1;min-width:0">
+          <button id="comparisonOpen" type="button" class="convert">[3] 비교표 작성</button>
+          <p>ERP와 원가분석 자료 비교 분석</p>
+        </div>
+      </div>
       <section class="workspace" id="representativeSection">
         <h2>대표모델 자료</h2>
+        <p>원가경쟁력회의 장표 작성을 위한 대표모델 표 만들기</p>
         <form id="representativeForm">
-          <label for="representativeItem">품번</label>
-          <input id="representativeItem" type="text" required placeholder="보관 BOM 파일의 _ 앞 품번을 입력해 주세요">
-          <button id="representativeGenerate" class="convert" type="submit">조회 및 대표모델 자료 다운로드</button>
+          <label for="representativeItem">보관 BOM 검색</label>
+          <input id="representativeItem" type="search" placeholder="품목·품목명·프로젝트명·세부프로젝트명 일부 입력 (비우면 전체 조회)">
+          <button id="representativeSearch" type="button">보관 BOM 조회</button>
+          <div id="representativeResults" aria-label="분석할 BOM 선택" style="max-height:320px;overflow:auto"></div>
+          <button id="representativeGenerate" class="convert" type="submit" disabled>선택한 BOM 분석 자료 다운로드</button>
         </form>
         <p id="representativeMessage" role="status"></p>
       </section>

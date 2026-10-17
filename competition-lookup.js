@@ -3,8 +3,9 @@
  for(const el of [panel,...panel.querySelectorAll('*')]){
    for(const attr of ['id','for','aria-labelledby'])if(el.hasAttribute(attr))el.setAttribute(attr,el.getAttribute(attr).replace(/^order/,'competitionOrder'));
  }
- document.getElementById('competitivenessWorkspace').append(panel);
+ document.getElementById('competitivenessWorkspace').insertBefore(panel,document.getElementById('representativeSection'));
  document.getElementById('competitionOrderLookupTitle').textContent='[2]프로젝트 BOM 조회';
+ panel.querySelector('.order-help').textContent='원가분석 자료 생성';
 // Search and edit order_mobility independently of the cost lookup.
 const ORDER_FIELDS = ['품목', '품목명', '프로젝트명', '세부프로젝트명', 'BOM'];
 const ORDER_SEARCH_FIELDS = ['품목', '프로젝트명', '세부프로젝트명'];

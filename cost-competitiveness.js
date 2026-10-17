@@ -7,10 +7,22 @@ async function buildCompetitiveness(file) {
   const source=book.Sheets.Sheet1 || book.Sheets[book.SheetNames[0]];
   if(!source)throw new Error('Sheet1 자료가 없습니다.');
   const matrix=XLSX.utils.sheet_to_json(source,{header:1,defval:null,raw:true});
+  // Excel stores a merged heading only in its top-left cell.
+  // Expand header merges for lookup without changing source cells or data rows.
+  const headers=matrix.slice(0,3).map(row=>row.slice());
+  const origin=XLSX.utils.decode_range(source['!ref']||'A1').s;
+  for(const merge of source['!merges']||[]){
+    const value=source[XLSX.utils.encode_cell(merge.s)]?.v;
+    for(let r=Math.max(merge.s.r,origin.r);r<=Math.min(merge.e.r,origin.r+2);r++){
+      for(let c=Math.max(merge.s.c,origin.c);c<=merge.e.c;c++){
+        if(headers[r-origin.r])headers[r-origin.r][c-origin.c]=value;
+      }
+    }
+  }
   const text=value=>String(value??'').trim();
   const find=(top,middle,bottom)=>{
     const indexes=[];
-    for(let c=0;c<(matrix[0]?.length||0);c++)if(text(matrix[0][c])===top&&(!middle||text(matrix[1]?.[c])===middle)&&(!bottom||text(matrix[2]?.[c])===bottom))indexes.push(c);
+    for(let c=0;c<(headers[0]?.length||0);c++)if(text(headers[0][c])===top&&(!middle||text(headers[1]?.[c])===middle)&&(!bottom||text(headers[2]?.[c])===bottom))indexes.push(c);
     if(indexes.length!==1)throw new Error('열을 확인해 주세요: '+[top,middle,bottom].filter(Boolean).join(' / '));
     return indexes[0];
   };
@@ -65,7 +77,7 @@ let competitivenessBusy=false;
     panel.hidden=false;tab.classList.add('active');
   });
   for(const other of [tabGenerate,tabUpload,tabLookup,tabDownload])other.addEventListener('click',()=>{
-    panel.hidden=true;tab.classList.remove('active');input.value='';message.textContent='원가계산현황 엑셀의 Sheet1을 업로드해 주세요.';
+    panel.hidden=true;tab.classList.remove('active');input.value='';message.textContent='원가계산현황 포멧 변경';
   });
   button.addEventListener('click',()=>input.click());
   input.addEventListener('change',async()=>{
