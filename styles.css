@@ -191,6 +191,22 @@ h1 {
 .status.idle + .convert { margin-top: 16px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.mbom-convert {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 14px;
+  color: var(--blue);
+  background: var(--white);
+  border: 1px solid #bcd3ff;
+  border-radius: 11px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mbom-convert:hover:not(:disabled) { background: var(--blue-soft); border-color: var(--blue); }
+.mbom-convert:disabled { color: #91a0b7; background: #f3f6fb; cursor: not-allowed; }
+
 .convert {
   width: 100%;
   min-height: 52px;

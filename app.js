@@ -1,6 +1,7 @@
 const input=document.querySelector('#fileInput');
 const drop=document.querySelector('#dropzone');
 const button=document.querySelector('#convert');
+const mbomButton=document.querySelector('#ebomToMbom');
 const nameEl=document.querySelector('#fileName');
 const meta=document.querySelector('#fileMeta');
 const statusEl=document.querySelector('#status');
@@ -31,6 +32,7 @@ function chooseFiles(values){
   nameEl.textContent=files.map(file=>file.name).join(' · ');
   meta.textContent=files.length+'개 파일 · '+(files.reduce((sum,file)=>sum+file.size,0)/1024).toFixed(1)+' KB';
   button.disabled=false;
+  mbomButton.disabled=files.length!==1;
   setStatus('ready',files.length===1?'원가를 생성할 준비가 되었습니다.':files.length+'개 BOM을 한 엑셀 파일의 개별 시트로 생성합니다.');
 }
 
@@ -64,6 +66,27 @@ input.addEventListener('change',()=>chooseFiles(input.files));
 drop.addEventListener('dragover',event=>{event.preventDefault();drop.classList.add('dragging')});
 drop.addEventListener('dragleave',()=>drop.classList.remove('dragging'));
 drop.addEventListener('drop',event=>{event.preventDefault();drop.classList.remove('dragging');chooseFiles(event.dataTransfer.files)});
+
+mbomButton.addEventListener('click',async()=>{
+  if(!selected||selectedFiles.length!==1||generatingCost)return;
+  generatingCost=true;input.disabled=true;drop.disabled=true;button.disabled=true;mbomButton.disabled=true;
+  setStatus('working','EBOM을 MBOM 양식으로 변환하고 있어요…');
+  try{
+    if(!window.ebomMbom?.convertFile)throw Error('EBOM 변환 기능을 불러오지 못했습니다. 화면을 새로고침해 주세요.');
+    const result=await window.ebomMbom.convertFile(selected,XLSX,ExcelJS);
+    if(window.desktopFile?.saveExcel){
+      const saved=await window.desktopFile.saveExcel(new Uint8Array(result.data),result.name);
+      if(saved.canceled){setStatus('ready','MBOM 저장을 취소했습니다.');return;}
+    }else{
+      latestDownload={blob:new Blob([result.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),name:result.name};
+      downloadResult();
+    }
+    setStatus('done','EBOM → MBOM 변환을 완료했습니다.');
+  }catch(error){setStatus('error','EBOM → MBOM 변환 실패: '+error.message);}
+  finally{
+    generatingCost=false;input.disabled=false;drop.disabled=false;button.disabled=!selectedFiles.length;mbomButton.disabled=selectedFiles.length!==1;
+  }
+});
 
 async function buildProductCost(file,options={}){
     const sourceBook=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,raw:true});
@@ -160,13 +183,13 @@ button.addEventListener('click',async()=>{
   if(!selectedFiles.length || generatingCost)return;
   const files=[...selectedFiles];
   generatingCost=true;input.disabled=true;drop.disabled=true;
-  button.disabled=true;button.firstChild.textContent='제품 원가 생성 중… ';setStatus('working','제품 BOM과 원가 자료를 확인하고 있어요…');
+  button.disabled=true;mbomButton.disabled=true;button.firstChild.textContent='제품 원가 생성 중… ';setStatus('working','제품 BOM과 원가 자료를 확인하고 있어요…');
   try{
     const result=files.length===1?await buildProductCost(files[0]):await buildCostFiles(files,undefined,(current,total)=>setStatus('working','제품 원가 생성 중 '+current+' / '+total));
     latestDownload={blob:new Blob([result.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),name:result.name};
     downloadResult();
     setStatus('done',`제품 원가 생성을 완료했습니다. 단가 적용 ${result.matchedPriceCount}건 · 단가없음 ${result.missingPriceCount}건`);
-  }catch(error){const message=typeof toFriendlyError==='function'?toFriendlyError(error):error.message;setStatus('error',`원가 생성 실패: ${message}`)}finally{generatingCost=false;input.disabled=false;drop.disabled=false;button.disabled=false;button.firstChild.textContent='제품 원가 생성 '}
+  }catch(error){const message=typeof toFriendlyError==='function'?toFriendlyError(error):error.message;setStatus('error',`원가 생성 실패: ${message}`)}finally{generatingCost=false;input.disabled=false;drop.disabled=false;button.disabled=false;mbomButton.disabled=selectedFiles.length!==1;button.firstChild.textContent='제품 원가 생성 '}
 });
 
 function getOutputSheetName(filename){
